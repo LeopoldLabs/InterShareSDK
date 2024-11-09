@@ -10,10 +10,19 @@ use std::sync::{Arc, RwLock};
 use windows::{
     core::{Result as WinResult, GUID},
     Devices::Bluetooth::GenericAttributeProfile::*,
-    Devices::Radios::*,
     Foundation::TypedEventHandler,
     Storage::Streams::*,
 };
+use windows::Devices::Bluetooth::Advertisement::*;
+use windows::Storage::Streams::DataWriter;
+
+
+fn uuid_to_buffer(uuid: &str) -> windows::core::Result<IBuffer> {
+    let writer = DataWriter::new()?;
+    let uuid = GUID::from(uuid);
+    writer.WriteBytes(uuid.data4.as_slice())?;
+    Ok(writer.DetachBuffer()?)
+}
 
 fn setup_gatt_server(nearby_server: Arc<InternalNearbyServer>) -> WinResult<GattServiceProvider> {
     let service_uuid = GUID::from(BLE_SERVICE_UUID);
@@ -96,6 +105,20 @@ impl BleServerImplementationDelegate for BleServer {
             .expect("Failed to unwrap gatt_service_provider");
 
         let service_provider = writable_gatt_service.insert(gatt_service_provider);
+        let publisher = BluetoothLEAdvertisementPublisher::new().expect("Failed to create BluetoothLEAdvertisementPublisher");
+        let advertisement = publisher.Advertisement().expect("Failed to get Advertisement");
+
+        let writer = DataWriter::new().expect("Failed to create DataWriter");
+        writer.WriteBytes(&BLE_SERVICE_UUID.as_bytes()).expect("Failed to write UUID data");
+        let buffer = writer.DetachBuffer().expect("Failed to detach buffer");
+
+        let service_uuid = BluetoothLEAdvertisementDataSection::Create(0x03, &buffer)
+            .expect("Failed to create DataSection");
+
+
+        advertisement.DataSections().expect("Failed to get DataSections").Append(&service_uuid).expect("Failed to append DataSection");
+
+        publisher.Start().expect("Failed to start AdvertisementPublisher");
 
         let adv_parameters = GattServiceProviderAdvertisingParameters::new().expect("Failed to create new GattServiceProviderAdvertisingParameters");
         adv_parameters.SetIsConnectable(true).expect("Failed to set IsConnectable");
