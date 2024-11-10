@@ -282,44 +282,60 @@ impl NearbyServer {
         }
     }
 
-    fn zip_directory(&self, zip: &mut ZipWriter<File>, prefix: String, dir_path: &str) {
-        let path = Path::new(&dir_path);
+    fn zip_directory(&self, zip: &mut ZipWriter<File>, base_dir: &Path, current_dir: &Path) {
+        // Calculate the relative path based on the base directory
+        let relative_path = current_dir.strip_prefix(base_dir).unwrap_or(current_dir);
+        let dir_name = relative_path.to_string_lossy();
 
-        let Some(directory_name) = path.file_name() else {
-            error!("Path does not have a final component.");
-            return;
-        };
+        info!("Zipping directory: {:?}", dir_name);
 
-        let directory_name = convert_os_str(&directory_name).expect("Failed to convert OSString to String");
-        let combined_path = PathBuf::from(prefix).join(directory_name);
-        let dir_name = combined_path.to_str().unwrap();
-
-        info!("Directory name: {:?}", dir_name);
-
-        let result = zip.add_directory(dir_name, SimpleFileOptions::default());
-
-        for entry in fs::read_dir(dir_path).expect("Failed to read directory.") {
-            let entry = entry.expect("Failed to get entry");
-            let path = entry.path();
-
-            if path.is_dir() {
-                self.zip_directory(zip, dir_name.to_string(), path.to_str().unwrap());
-                return;
-            } else {
-                info!("Adding file to ZIP dir: {:?}", path);
-                let file_name = path.file_name().expect("Could not read file name");
-                let zip_file_path = path.join(file_name);
-
-                let _ = zip.start_file(zip_file_path.to_str().unwrap(), SimpleFileOptions::default());
-
-                let mut file = File::open(path).unwrap();
-                let _ = std::io::copy(&mut file, zip);
-            }
-        }
-
-        if let Err(error) = result {
+        // Create the directory in the ZIP archive
+        if let Err(error) = zip.add_directory(&dir_name, SimpleFileOptions::default()) {
             error!("Error while trying to create ZIP directory: {:?}", error);
             return;
+        }
+
+        // Iterate through the directory entries
+        for entry in fs::read_dir(current_dir).expect("Failed to read directory.") {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(e) => {
+                    error!("Failed to get entry: {:?}", e);
+                    continue;
+                }
+            };
+
+            let entry_path = entry.path();
+
+            if entry_path.is_dir() {
+                // Recursively zip subdirectories
+                self.zip_directory(zip, base_dir, &entry_path);
+            } else {
+                // Get the relative file path
+                let file_name = entry_path.strip_prefix(base_dir).unwrap_or(&entry_path);
+                let zip_file_name = file_name.to_string_lossy();
+
+                info!("Adding file to ZIP: {:?}", zip_file_name);
+
+                // Add the file to the ZIP archive
+                if let Err(error) = zip.start_file(&zip_file_name, SimpleFileOptions::default()) {
+                    error!("Failed to start file in ZIP: {:?}", error);
+                    continue;
+                }
+
+                // Copy the file contents to the ZIP archive
+                let mut file = match File::open(&entry_path) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        error!("Failed to open file {:?}: {:?}", entry_path, e);
+                        continue;
+                    }
+                };
+
+                if let Err(error) = std::io::copy(&mut file, zip) {
+                    error!("Failed to copy file {:?} to ZIP: {:?}", entry_path, error);
+                }
+            }
         }
     }
 
@@ -343,7 +359,7 @@ impl NearbyServer {
             let file = Path::new(file_path);
 
             if file.is_dir() {
-                self.zip_directory(&mut zip, "".to_string(), &file_path);
+                self.zip_directory(&mut zip, file, file);
             } else {
                 info!("Compressing file: {:?}", file);
                 zip.start_file(convert_os_str(file.file_name().unwrap()).unwrap(), SimpleFileOptions::default())
