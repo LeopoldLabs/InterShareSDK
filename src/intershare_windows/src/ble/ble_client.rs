@@ -79,11 +79,10 @@ impl BleClient {
         let watcher = BluetoothLEAdvertisementWatcher::new()?;
 
         // Set up the filter for the service UUID
-        // let filter = BluetoothLEAdvertisementFilter::new()?;
-        // filter.Advertisement()?.ServiceUuids()?.Append(GUID::from(BLE_SERVICE_UUID))?;
-        // watcher.SetAdvertisementFilter(&filter)?;
+        let filter = BluetoothLEAdvertisementFilter::new()?;
+        filter.Advertisement()?.ServiceUuids()?.Append(GUID::from(BLE_SERVICE_UUID))?;
+        watcher.SetAdvertisementFilter(&filter)?;
 
-        // Set scanning mode to Active
         watcher.SetScanningMode(BluetoothLEScanningMode::Active)?;
 
         let discovered_devices = Arc::new(Mutex::new(Vec::new()));
@@ -95,36 +94,13 @@ impl BleClient {
                   args: &Option<BluetoothLEAdvertisementReceivedEventArgs>| {
                 let args = args.as_ref().unwrap();
                 let ble_address = args.BluetoothAddress()?;
-                let advertisement_data = args.Advertisement()?;
                 let discovered_devices = discovered_devices_clone.clone();
                 let internal_discovery = internal_discovery_clone.clone();
-
-                let service_uuids = advertisement_data.ServiceUuids()?;
-                let mut has_service_uuid = false;
-                for uuid in service_uuids {
-                    if uuid == GUID::from(BLE_SERVICE_UUID) {
-                        has_service_uuid = true;
-                        break;
-                    }
-                }
-
-                if !has_service_uuid {
-                    return Ok(());
-                }
 
                 let mut devices = discovered_devices.lock().unwrap();
                 devices.push(ble_address);
 
-                // Spawn a task to handle the connection and data retrieval
                 runtime_handle.spawn(async move {
-                    // Check if the device has already been discovered
-                    // {
-                        // let devices = discovered_devices.lock().unwrap();
-                        // if devices.contains(&ble_address) {
-                        //     return;
-                        // }
-                    // }
-
                     if let Err(e) = BleClient::connect_and_read_characteristic(ble_address, internal_discovery).await {
                         error!("Error connecting to device: {:?}", e);
                     }
@@ -142,7 +118,6 @@ impl BleClient {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
 
-        // Stop the watcher
         if watcher.Status()? == BluetoothLEAdvertisementWatcherStatus::Started {
             watcher.Stop()?;
             info!("Stopped BLE advertisement watcher");

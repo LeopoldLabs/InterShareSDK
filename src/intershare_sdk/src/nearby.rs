@@ -289,15 +289,19 @@ impl NearbyServer {
         path_str.replace(std::path::MAIN_SEPARATOR, "/")
     }
 
-    fn zip_directory(&self, zip: &mut ZipWriter<File>, base_dir: &Path, current_dir: &Path) {
+    fn zip_directory(&self, zip: &mut ZipWriter<File>, base_dir: &Path, current_dir: &Path, prefix: Option<&str>) {
         // Calculate the relative path based on the base directory
         let relative_path = current_dir.strip_prefix(base_dir).unwrap_or(current_dir);
-        let dir_name = Self::normalize_path(relative_path);
+        let relative_path_str = if let Some(prefix) = prefix {
+            Self::normalize_path(&Path::new(prefix).join(relative_path))
+        } else {
+            Self::normalize_path(relative_path)
+        };
 
-        info!("Zipping directory: {:?}", dir_name);
+        info!("Zipping directory: {:?}", relative_path_str);
 
         // Create the directory in the ZIP archive
-        if let Err(error) = zip.add_directory(dir_name, SimpleFileOptions::default()) {
+        if let Err(error) = zip.add_directory(&relative_path_str, SimpleFileOptions::default()) {
             error!("Error while trying to create ZIP directory: {:?}", error);
             return;
         }
@@ -316,11 +320,15 @@ impl NearbyServer {
 
             if entry_path.is_dir() {
                 // Recursively zip subdirectories
-                self.zip_directory(zip, base_dir, &entry_path);
+                self.zip_directory(zip, base_dir, &entry_path, prefix);
             } else {
-                // Get the relative file path
+                // Get the relative file path and normalize it
                 let file_name = entry_path.strip_prefix(base_dir).unwrap_or(&entry_path);
-                let zip_file_name = Self::normalize_path(file_name);
+                let zip_file_name = if let Some(prefix) = prefix {
+                    Self::normalize_path(&Path::new(prefix).join(file_name))
+                } else {
+                    Self::normalize_path(file_name)
+                };
 
                 info!("Adding file to ZIP: {:?}", zip_file_name);
 
@@ -351,7 +359,10 @@ impl NearbyServer {
 
         let mut encrypted_stream = match self.connect(receiver, &progress_delegate).await {
             Ok(connection) => connection,
-            Err(error) => return Err(error)
+            Err(error) => {
+                NearbyServer::update_progress(&progress_delegate, SendProgressState::Unknown);
+                return Err(error)
+            }
         };
 
         let mut proto_stream = Stream::new(&mut encrypted_stream);
@@ -366,7 +377,8 @@ impl NearbyServer {
             let file = Path::new(file_path);
 
             if file.is_dir() {
-                self.zip_directory(&mut zip, file, file);
+                let prefix = file.file_name().unwrap().to_string_lossy().to_string();
+                self.zip_directory(&mut zip, file, file, Some(&prefix));
             } else {
                 info!("Compressing file: {:?}", file);
                 zip.start_file(convert_os_str(file.file_name().unwrap()).unwrap(), SimpleFileOptions::default())
