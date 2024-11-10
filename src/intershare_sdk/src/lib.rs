@@ -44,6 +44,7 @@ fn convert_os_str(os_str: &OsStr) -> Option<String> {
     os_str.to_str().map(|s| s.to_string())
 }
 
+#[cfg(not(target_os="android"))]
 fn get_log_file_path() -> Option<PathBuf> {
     let project_dirs = BaseDirs::new()?;
     let config_dir = project_dirs.config_dir();
