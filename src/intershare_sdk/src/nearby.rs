@@ -290,7 +290,7 @@ impl NearbyServer {
         info!("Zipping directory: {:?}", dir_name);
 
         // Create the directory in the ZIP archive
-        if let Err(error) = zip.add_directory(&dir_name, SimpleFileOptions::default()) {
+        if let Err(error) = zip.add_directory(dir_name, SimpleFileOptions::default()) {
             error!("Error while trying to create ZIP directory: {:?}", error);
             return;
         }
