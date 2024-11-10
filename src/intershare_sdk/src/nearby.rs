@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use local_ip_address::local_ip;
+use log::{error, info};
 use prost_stream::Stream;
 use protocol::communication::{FileTransferIntent, TransferRequest, TransferRequestResponse};
 use protocol::communication::transfer_request::Intent;
@@ -136,7 +137,7 @@ impl NearbyServer {
             return Some(my_local_ip.to_string());
         }
         else if let Err(error) = ip {
-            println!("Unable to obtain IP address: {:?}", error);
+            info!("Unable to obtain IP address: {:?}", error);
         }
 
         return None;
@@ -157,8 +158,8 @@ impl NearbyServer {
                 let ip = self.get_current_ip();
 
                 if let Some(my_local_ip) = ip {
-                    println!("IP: {:?}", my_local_ip);
-                    println!("Port: {:?}", tcp_server.port);
+                    info!("IP: {:?}", my_local_ip);
+                    info!("Port: {:?}", tcp_server.port);
 
                     tcp_server.start_loop();
 
@@ -170,7 +171,7 @@ impl NearbyServer {
                     self.variables.write().await.tcp_server = Some(tcp_server);
                 }
             } else if let Err(error) = tcp_server {
-                println!("Error trying to start TCP server: {:?}", error);
+                error!("Error trying to start TCP server: {:?}", error);
             }
         }
 
@@ -207,12 +208,12 @@ impl NearbyServer {
         };
 
         let socket_string = format!("{0}:{1}", tcp_connection_details.hostname, tcp_connection_details.port);
-        println!("{:?}", socket_string);
+        info!("{:?}", socket_string);
 
         let socket_address = socket_string.to_socket_addrs();
 
         let Ok(socket_address) = socket_address else {
-            println!("{:?}", socket_address.unwrap_err());
+            error!("{:?}", socket_address.unwrap_err());
             return Err(ConnectErrors::FailedToGetSocketAddress);
         };
 
@@ -244,7 +245,7 @@ impl NearbyServer {
         }
 
         if let Err(error) = encrypted_stream {
-            println!("{:?}", error)
+            error!("{:?}", error)
         }
 
         // Use BLE if TCP fails
@@ -285,7 +286,7 @@ impl NearbyServer {
         let path = Path::new(&dir_path);
 
         let Some(directory_name) = path.file_name() else {
-            println!("Path does not have a final component.");
+            error!("Path does not have a final component.");
             return;
         };
 
@@ -293,7 +294,7 @@ impl NearbyServer {
         let combined_path = PathBuf::from(prefix).join(directory_name);
         let dir_name = combined_path.to_str().unwrap();
 
-        println!("Directory name: {:?}", dir_name);
+        info!("Directory name: {:?}", dir_name);
 
         let result = zip.add_directory(dir_name, SimpleFileOptions::default());
 
@@ -305,7 +306,7 @@ impl NearbyServer {
                 self.zip_directory(zip, dir_name.to_string(), path.to_str().unwrap());
                 return;
             } else {
-                println!("Adding file to ZIP dir: {:?}", path);
+                info!("Adding file to ZIP dir: {:?}", path);
                 let file_name = path.file_name().expect("Could not read file name");
                 let zip_file_path = path.join(file_name);
 
@@ -317,7 +318,7 @@ impl NearbyServer {
         }
 
         if let Err(error) = result {
-            println!("Error while trying to create ZIP directory: {:?}", error);
+            error!("Error while trying to create ZIP directory: {:?}", error);
             return;
         }
     }
@@ -333,7 +334,7 @@ impl NearbyServer {
         let mut proto_stream = Stream::new(&mut encrypted_stream);
 
         NearbyServer::update_progress(&progress_delegate, SendProgressState::Compressing);
-        println!("Compressing");
+        info!("Compressing");
 
         let mut tmp_file = NamedTempFile::new().expect("Failed to create temporary ZIP file.");
         let mut zip = zip::ZipWriter::new(tmp_file.reopen().expect("Failed to reopen tmp file"));
@@ -344,7 +345,7 @@ impl NearbyServer {
             if file.is_dir() {
                 self.zip_directory(&mut zip, "".to_string(), &file_path);
             } else {
-                println!("Compressing file: {:?}", file);
+                info!("Compressing file: {:?}", file);
                 zip.start_file(convert_os_str(file.file_name().unwrap()).unwrap(), SimpleFileOptions::default())
                     .unwrap();
 
@@ -440,7 +441,7 @@ impl NearbyServer {
             let mut encrypted_stream = match initiate_receiver_communication(native_stream_handle) {
                 Ok(request) => request,
                 Err(error) => {
-                    println!("Encryption error {:}", error);
+                    error!("Encryption error {:}", error);
                     return;
                 }
             };
@@ -449,7 +450,7 @@ impl NearbyServer {
             let transfer_request = match prost_stream.recv::<TransferRequest>() {
                 Ok(message) => message,
                 Err(error) => {
-                    println!("Error {:}", error);
+                    error!("Error {:}", error);
                     return;
                 }
             };

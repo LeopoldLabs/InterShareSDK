@@ -1,10 +1,17 @@
 use std::ffi::OsStr;
+use std::{fs, panic};
+use std::fs::File;
+use std::path::PathBuf;
+use std::sync::Once;
+use directories::{BaseDirs, ProjectDirs};
+use log::{error, info, LevelFilter};
 
 #[cfg(target_os="android")]
 use android_logger::Config;
 #[cfg(target_os="android")]
 use log::LevelFilter;
 
+use simplelog::{Config, WriteLogger};
 pub use protocol;
 pub use protocol::communication::ClipboardTransferIntent;
 pub use protocol::discovery::Device;
@@ -24,8 +31,20 @@ pub const BLE_SERVICE_UUID: &str = "68D60EB2-8AAA-4D72-8851-BD6D64E169B7";
 pub const BLE_CHARACTERISTIC_UUID: &str = "0BEBF3FE-9A5E-4ED1-8157-76281B3F0DA5";
 pub const BLE_BUFFER_SIZE: usize = 1024;
 
+static INIT_LOGGER: Once = Once::new();
+
 fn convert_os_str(os_str: &OsStr) -> Option<String> {
     os_str.to_str().map(|s| s.to_string())
+}
+
+fn get_log_file_path() -> Option<PathBuf> {
+    let project_dirs = BaseDirs::new()?;
+    let config_dir = project_dirs.config_dir();
+
+    return Some(config_dir
+        .join("InterShare")
+        .join( "intershare.log")
+    )
 }
 
 #[cfg(target_os="android")]
@@ -35,7 +54,45 @@ pub fn init_logger() {
     );
 }
 
+fn set_panic_logger() {
+    panic::set_hook(Box::new(|panic_info| {
+        let location = panic_info.location().unwrap();
+        let message = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Unknown panic message".to_string()
+        };
+
+        error!(
+            "Panic occurred at file '{}' line {}: {}",
+            location.file(),
+            location.line(),
+            message
+        );
+    }));
+}
+
 #[cfg(not(target_os="android"))]
 pub fn init_logger() {
-    // Do nothing
+    INIT_LOGGER.call_once(|| {
+        // Get the platform-specific configuration folder
+        let log_file_path = get_log_file_path().expect("Failed to get log file path");
+
+        // Ensure the directory exists
+        if let Some(parent) = log_file_path.parent() {
+            fs::create_dir_all(parent).expect("Failed to create log directory");
+        }
+
+        // Initialize the logger
+        let log_file = File::create(log_file_path).expect("Failed to create log file");
+        WriteLogger::init(LevelFilter::Info, Config::default(), log_file)
+            .expect("Failed to initialize logger");
+
+        set_panic_logger();
+
+
+        info!("Logger initialized successfully.");
+    });
 }

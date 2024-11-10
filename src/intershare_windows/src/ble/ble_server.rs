@@ -105,20 +105,6 @@ impl BleServerImplementationDelegate for BleServer {
             .expect("Failed to unwrap gatt_service_provider");
 
         let service_provider = writable_gatt_service.insert(gatt_service_provider);
-        let publisher = BluetoothLEAdvertisementPublisher::new().expect("Failed to create BluetoothLEAdvertisementPublisher");
-        let advertisement = publisher.Advertisement().expect("Failed to get Advertisement");
-
-        let writer = DataWriter::new().expect("Failed to create DataWriter");
-        writer.WriteBytes(&BLE_SERVICE_UUID.as_bytes()).expect("Failed to write UUID data");
-        let buffer = writer.DetachBuffer().expect("Failed to detach buffer");
-
-        let service_uuid = BluetoothLEAdvertisementDataSection::Create(0x03, &buffer)
-            .expect("Failed to create DataSection");
-
-
-        advertisement.DataSections().expect("Failed to get DataSections").Append(&service_uuid).expect("Failed to append DataSection");
-
-        publisher.Start().expect("Failed to start AdvertisementPublisher");
 
         let adv_parameters = GattServiceProviderAdvertisingParameters::new().expect("Failed to create new GattServiceProviderAdvertisingParameters");
         adv_parameters.SetIsConnectable(true).expect("Failed to set IsConnectable");

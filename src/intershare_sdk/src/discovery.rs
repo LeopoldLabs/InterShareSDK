@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use log::{error, info, warn};
 use protocol::DiscoveryDelegate;
 use protocol::discovery::{DeviceConnectionInfo, DeviceDiscoveryMessage, Device};
 use protocol::discovery::device_discovery_message::Content;
@@ -74,6 +75,8 @@ impl Discovery {
     }
 
     pub fn parse_discovery_message(&mut self, data: Vec<u8>, ble_uuid: Option<String>) {
+        info!("Got discovery message from {:?}", ble_uuid);
+
         let discovery_message = DeviceDiscoveryMessage::decode_length_delimited(data.as_slice());
 
         let Ok(discovery_message) = discovery_message else {
@@ -81,9 +84,12 @@ impl Discovery {
         };
 
         match discovery_message.content {
-            None => {}
+            None => {
+                warn!("[{:?}] Discovery message has no content", ble_uuid);
+            }
             Some(Content::DeviceConnectionInfo(device_connection_info)) => {
                 let Some(device) = &device_connection_info.device else {
+                    warn!("[{:?}] Discovery message does not contain any device info", ble_uuid);
                     return;
                 };
 
@@ -98,9 +104,11 @@ impl Discovery {
 
                 if DISCOVERED_DEVICES.get().unwrap().write().unwrap().contains_key(&device.id) {
                     if !DISCOVERED_DEVICES.get().unwrap().write().unwrap().get(&device.id).unwrap().eq(&device_connection_info) {
+                        info!("Device {:} already exist, updating...", &device.name);
                         self.add_discovered_device(device.clone());
                     }
                 } else {
+                    info!("Device {:} discovered", &device.name);
                     self.add_discovered_device(device.clone());
                 }
 

@@ -1,6 +1,6 @@
 use crate::ble::ble_client::BleClient;
 pub use intershare_sdk::discovery::Discovery as InternalDiscovery;
-use intershare_sdk::{Device, DiscoveryDelegate};
+use intershare_sdk::{init_logger, Device, DiscoveryDelegate};
 use std::sync::{Arc, Mutex};
 use intershare_sdk::errors::DiscoverySetupError;
 
@@ -10,6 +10,7 @@ pub struct Discovery {
 
 impl Discovery {
     pub fn new(delegate: Option<Box<dyn DiscoveryDelegate>>) -> Result<Self, DiscoverySetupError> {
+        init_logger();
         let internal_discovery = Arc::new(Mutex::new(
             InternalDiscovery::new(delegate)?,
         ));

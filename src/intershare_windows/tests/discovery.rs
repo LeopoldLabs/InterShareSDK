@@ -20,7 +20,6 @@ impl DiscoveryDelegate for DiscoveryTestDelegate {
 pub fn test_discovery() {
     let discovery = Discovery::new(Some(Box::new(DiscoveryTestDelegate {})));
     discovery.unwrap().start();
-
     loop {
         sleep(Duration::from_secs(10))
     }

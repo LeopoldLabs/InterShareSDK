@@ -1,11 +1,12 @@
 use crate::ble::ble_server::BleServer;
 use intershare_sdk::nearby::{NearbyConnectionDelegate, SendProgressDelegate};
 use intershare_sdk::nearby::NearbyServer as InternalNearbyServer;
-use intershare_sdk::Device;
+use intershare_sdk::{init_logger, Device};
 use std::sync::Arc;
 use dirs::download_dir;
 use tokio::runtime::Runtime;
 use intershare_sdk::errors::ConnectErrors;
+use uniffi::deps::log::info;
 
 pub struct NearbyServer {
     runtime: Runtime,
@@ -14,8 +15,9 @@ pub struct NearbyServer {
 
 impl NearbyServer {
     pub fn new(my_device: Device, delegate: Option<Box<dyn NearbyConnectionDelegate>>) -> NearbyServer {
+        init_logger();
         let downloads_dir = download_dir().expect("Failed to get downloads directory").to_string_lossy().to_string();
-        println!("Downloads directory: {}", downloads_dir);
+        info!("Downloads directory: {}", downloads_dir);
 
         let nearby = Arc::new(InternalNearbyServer::new(my_device, downloads_dir, delegate));
         let ble_server = BleServer::new(Arc::clone(&nearby))

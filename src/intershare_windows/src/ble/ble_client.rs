@@ -21,6 +21,7 @@ use tokio::runtime::Handle;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 use intershare_sdk::{BLE_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
 use intershare_sdk::discovery::BleDiscoveryImplementationDelegate;
+use uniffi::deps::log::error;
 use crate::discovery::InternalDiscovery;
 
 
@@ -36,10 +37,7 @@ impl BleDiscoveryImplementationDelegate for BleClient {
 
         scanning.store(true, Ordering::Relaxed);
 
-        // Start a new thread to run the async code
         std::thread::spawn(move || {
-            // Initialize the COM library for use by the calling thread
-            // windows::core::initialize_mta().unwrap();
             unsafe {
                 CoInitializeEx(None, COINIT_MULTITHREADED).unwrap();
             }
@@ -53,7 +51,7 @@ impl BleDiscoveryImplementationDelegate for BleClient {
 
             rt.block_on(async {
                 if let Err(e) = BleClient::scan_and_connect(internal_discovery, scanning, handle).await {
-                    eprintln!("Error during scanning: {:?}", e);
+                    error!("Error during scanning: {:?}", e);
                 }
             });
         });
@@ -120,7 +118,7 @@ impl BleClient {
                         BleClient::connect_and_read_characteristic(ble_address, internal_discovery)
                             .await
                     {
-                        eprintln!("Error connecting to device: {:?}", e);
+                        error!("Error connecting to device: {:?}", e);
                     }
                 });
 
@@ -154,13 +152,13 @@ impl BleClient {
         // Get the GATT services
         let services_result = device.GetGattServicesForUuidAsync(GUID::from(BLE_SERVICE_UUID))?.get()?;
         if services_result.Status()? != GattCommunicationStatus::Success {
-            eprintln!("Failed to get GATT services");
+            error!("Failed to get GATT services");
             return Ok(());
         }
         let services = services_result.Services()?;
 
         if services.Size()? == 0 {
-            eprintln!("No services found");
+            error!("No services found");
             return Ok(());
         }
 
@@ -169,13 +167,13 @@ impl BleClient {
         // Get the characteristics
         let characteristics_result = service.GetCharacteristicsForUuidAsync(GUID::from(BLE_CHARACTERISTIC_UUID))?.get()?;
         if characteristics_result.Status()? != GattCommunicationStatus::Success {
-            eprintln!("Failed to get characteristics");
+            error!("Failed to get characteristics");
             return Ok(());
         }
         let characteristics = characteristics_result.Characteristics()?;
 
         if characteristics.Size()? == 0 {
-            eprintln!("No characteristics found");
+            error!("No characteristics found");
             return Ok(());
         }
 
@@ -184,7 +182,7 @@ impl BleClient {
         // Read the characteristic value
         let read_result = characteristic.ReadValueAsync()?.get()?;
         if read_result.Status()? != GattCommunicationStatus::Success {
-            eprintln!("Failed to read characteristic");
+            error!("Failed to read characteristic");
             return Ok(());
         }
         let value = read_result.Value()?;
