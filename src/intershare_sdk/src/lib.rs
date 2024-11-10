@@ -3,15 +3,22 @@ use std::{fs, panic};
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Once;
-use directories::{BaseDirs, ProjectDirs};
-use log::{error, info, LevelFilter};
 
+// Only Android
 #[cfg(target_os="android")]
 use android_logger::Config;
 #[cfg(target_os="android")]
 use log::LevelFilter;
 
+// If not Android
+#[cfg(not(target_os="android"))]
 use simplelog::{Config, WriteLogger};
+#[cfg(not(target_os="android"))]
+use log::{error, info, LevelFilter};
+#[cfg(not(target_os="android"))]
+use directories::{BaseDirs, ProjectDirs};
+
+
 pub use protocol;
 pub use protocol::communication::ClipboardTransferIntent;
 pub use protocol::discovery::Device;
@@ -54,6 +61,7 @@ pub fn init_logger() {
     );
 }
 
+#[cfg(not(target_os="android"))]
 fn set_panic_logger() {
     panic::set_hook(Box::new(|panic_info| {
         let location = panic_info.location().unwrap();

@@ -13,16 +13,6 @@ use windows::{
     Foundation::TypedEventHandler,
     Storage::Streams::*,
 };
-use windows::Devices::Bluetooth::Advertisement::*;
-use windows::Storage::Streams::DataWriter;
-
-
-fn uuid_to_buffer(uuid: &str) -> windows::core::Result<IBuffer> {
-    let writer = DataWriter::new()?;
-    let uuid = GUID::from(uuid);
-    writer.WriteBytes(uuid.data4.as_slice())?;
-    Ok(writer.DetachBuffer()?)
-}
 
 fn setup_gatt_server(nearby_server: Arc<InternalNearbyServer>) -> WinResult<GattServiceProvider> {
     let service_uuid = GUID::from(BLE_SERVICE_UUID);
