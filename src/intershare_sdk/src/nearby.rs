@@ -281,11 +281,18 @@ impl NearbyServer {
             progress_delegate.progress_changed(state);
         }
     }
+    
+    fn normalize_path(path: &Path) -> String {
+        // Convert the path to a string using to_string_lossy()
+        // and replace platform-specific separators (`\` on Windows) with `/`
+        let path_str = path.to_string_lossy();
+        path_str.replace(std::path::MAIN_SEPARATOR, "/")
+    }
 
     fn zip_directory(&self, zip: &mut ZipWriter<File>, base_dir: &Path, current_dir: &Path) {
         // Calculate the relative path based on the base directory
         let relative_path = current_dir.strip_prefix(base_dir).unwrap_or(current_dir);
-        let dir_name = relative_path.to_string_lossy();
+        let dir_name = Self::normalize_path(relative_path);
 
         info!("Zipping directory: {:?}", dir_name);
 
@@ -313,7 +320,7 @@ impl NearbyServer {
             } else {
                 // Get the relative file path
                 let file_name = entry_path.strip_prefix(base_dir).unwrap_or(&entry_path);
-                let zip_file_name = file_name.to_string_lossy();
+                let zip_file_name = Self::normalize_path(file_name);
 
                 info!("Adding file to ZIP: {:?}", zip_file_name);
 

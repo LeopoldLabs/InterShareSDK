@@ -21,7 +21,7 @@ use tokio::runtime::Handle;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 use intershare_sdk::{BLE_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
 use intershare_sdk::discovery::BleDiscoveryImplementationDelegate;
-use uniffi::deps::log::error;
+use uniffi::deps::log::{error, info};
 use crate::discovery::InternalDiscovery;
 
 
@@ -79,9 +79,9 @@ impl BleClient {
         let watcher = BluetoothLEAdvertisementWatcher::new()?;
 
         // Set up the filter for the service UUID
-        let filter = BluetoothLEAdvertisementFilter::new()?;
-        filter.Advertisement()?.ServiceUuids()?.Append(GUID::from(BLE_SERVICE_UUID))?;
-        watcher.SetAdvertisementFilter(&filter)?;
+        // let filter = BluetoothLEAdvertisementFilter::new()?;
+        // filter.Advertisement()?.ServiceUuids()?.Append(GUID::from(BLE_SERVICE_UUID))?;
+        // watcher.SetAdvertisementFilter(&filter)?;
 
         // Set scanning mode to Active
         watcher.SetScanningMode(BluetoothLEScanningMode::Active)?;
@@ -95,29 +95,37 @@ impl BleClient {
                   args: &Option<BluetoothLEAdvertisementReceivedEventArgs>| {
                 let args = args.as_ref().unwrap();
                 let ble_address = args.BluetoothAddress()?;
+                let advertisement_data = args.Advertisement()?;
                 let discovered_devices = discovered_devices_clone.clone();
                 let internal_discovery = internal_discovery_clone.clone();
+
+                let service_uuids = advertisement_data.ServiceUuids()?;
+                let mut has_service_uuid = false;
+                for uuid in service_uuids {
+                    if uuid == GUID::from(BLE_SERVICE_UUID) {
+                        has_service_uuid = true;
+                        break;
+                    }
+                }
+
+                if !has_service_uuid {
+                    return Ok(());
+                }
+
+                let mut devices = discovered_devices.lock().unwrap();
+                devices.push(ble_address);
 
                 // Spawn a task to handle the connection and data retrieval
                 runtime_handle.spawn(async move {
                     // Check if the device has already been discovered
-                    {
-                        let devices = discovered_devices.lock().unwrap();
-                        if devices.contains(&ble_address) {
-                            return;
-                        }
-                    }
+                    // {
+                        // let devices = discovered_devices.lock().unwrap();
+                        // if devices.contains(&ble_address) {
+                        //     return;
+                        // }
+                    // }
 
-                    // Add the device to the discovered list
-                    {
-                        let mut devices = discovered_devices.lock().unwrap();
-                        devices.push(ble_address);
-                    }
-
-                    if let Err(e) =
-                        BleClient::connect_and_read_characteristic(ble_address, internal_discovery)
-                            .await
-                    {
+                    if let Err(e) = BleClient::connect_and_read_characteristic(ble_address, internal_discovery).await {
                         error!("Error connecting to device: {:?}", e);
                     }
                 });
@@ -131,12 +139,13 @@ impl BleClient {
 
         // Wait until scanning is stopped
         while scanning.load(Ordering::Relaxed) {
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
 
         // Stop the watcher
         if watcher.Status()? == BluetoothLEAdvertisementWatcherStatus::Started {
             watcher.Stop()?;
+            info!("Stopped BLE advertisement watcher");
         }
 
         Ok(())
@@ -148,17 +157,19 @@ impl BleClient {
     ) -> Result<()> {
         // Connect to the device
         let device = BluetoothLEDevice::FromBluetoothAddressAsync(ble_address)?.get()?;
+        let device_id = device.DeviceId()?.to_string();
+        info!("Found device with ID: {:?}", device_id);
 
         // Get the GATT services
         let services_result = device.GetGattServicesForUuidAsync(GUID::from(BLE_SERVICE_UUID))?.get()?;
         if services_result.Status()? != GattCommunicationStatus::Success {
-            error!("Failed to get GATT services");
+            error!("[{:?}] Failed to get GATT services", device_id);
             return Ok(());
         }
         let services = services_result.Services()?;
 
         if services.Size()? == 0 {
-            error!("No services found");
+            error!("[{:?}] No services found", device_id);
             return Ok(());
         }
 
@@ -167,13 +178,13 @@ impl BleClient {
         // Get the characteristics
         let characteristics_result = service.GetCharacteristicsForUuidAsync(GUID::from(BLE_CHARACTERISTIC_UUID))?.get()?;
         if characteristics_result.Status()? != GattCommunicationStatus::Success {
-            error!("Failed to get characteristics");
+            error!("[{:?}] Failed to get characteristics", device_id);
             return Ok(());
         }
         let characteristics = characteristics_result.Characteristics()?;
 
         if characteristics.Size()? == 0 {
-            error!("No characteristics found");
+            error!("[{:?}] No characteristics found", device_id);
             return Ok(());
         }
 
@@ -182,7 +193,7 @@ impl BleClient {
         // Read the characteristic value
         let read_result = characteristic.ReadValueAsync()?.get()?;
         if read_result.Status()? != GattCommunicationStatus::Success {
-            error!("Failed to read characteristic");
+            error!("[{:?}] Failed to read characteristic", device_id);
             return Ok(());
         }
         let value = read_result.Value()?;
@@ -194,7 +205,7 @@ impl BleClient {
         // Process the data
         {
             let mut discovery = internal_discovery.lock().unwrap();
-            discovery.parse_discovery_message(buffer, Some(device.DeviceId()?.to_string()));
+            discovery.parse_discovery_message(buffer, Some(device_id));
         }
 
         Ok(())
