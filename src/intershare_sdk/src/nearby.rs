@@ -395,7 +395,7 @@ impl NearbyServer {
             .expect("Failed to retrieve metadata from ZIP")
             .len();
 
-        println!("Finished ZIP with a size of: {:?}", file_size);
+        info!("Finished ZIP with a size of: {:?}", file_size);
 
         NearbyServer::update_progress(&progress_delegate, SendProgressState::Requesting);
 

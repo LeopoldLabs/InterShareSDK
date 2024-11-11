@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::sync::atomic::{AtomicBool, Ordering};
+use log::warn;
 use prost_stream::Stream;
 use protocol::communication::transfer_request::Intent;
 use protocol::communication::{ClipboardTransferIntent, FileTransferIntent, TransferRequest, TransferRequestResponse};
@@ -129,28 +130,29 @@ impl ConnectionRequest {
         let mut zip_file = named_file.reopen().expect("Failed to reopen temporary ZIP file");
 
         let mut buffer = [0; BLE_BUFFER_SIZE];
-        let mut all_read = 0.0;
+        let mut all_read = 0;
 
         while let Ok(read_size) = stream.read(&mut buffer) {
             if self.should_cancel.load(Ordering::Relaxed) || read_size == 0 {
                 break;
             }
 
-            all_read += read_size as f64;
+            all_read += read_size as u64;
 
             zip_file.write_all(&buffer[..read_size])
                 .expect("Failed to write file to disk");
 
-            let progress = all_read / file_transfer.file_size as f64;
+            let progress = all_read as f64 / file_transfer.file_size as f64;
             self.update_progress(ReceiveProgressState::Receiving { progress });
 
-            if all_read >= file_transfer.file_size as f64 { break; }
+            if all_read >= file_transfer.file_size { break; }
         }
 
         stream.close();
 
-        if all_read < file_transfer.file_size as f64 {
+        if all_read < file_transfer.file_size {
             let _ = named_file.close();
+            warn!("Wrong file size. Expected: {:?}, but got {:?}", file_transfer.file_size, all_read);
             self.update_progress(ReceiveProgressState::Cancelled);
             return None;
         }
