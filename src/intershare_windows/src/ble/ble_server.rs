@@ -46,7 +46,7 @@ fn setup_gatt_server(nearby_server: Arc<InternalNearbyServer>) -> WinResult<Gatt
                 let value = DeviceDiscoveryMessage {
                     content: Some(
                         Content::DeviceConnectionInfo(
-                            nearby_server_clone.variables.blocking_read().device_connection_info.clone()
+                            nearby_server_clone.device_connection_info.blocking_read().clone()
                         )
                     ),
                 }.encode_length_delimited_to_vec();
