@@ -177,7 +177,7 @@ impl NearbyServer {
 
         self.variables.write().await.advertise = true;
 
-        if let Some(ble_advertisement_implementation) = &self.variables.read().await.ble_server_implementation {
+        if let Some(ble_advertisement_implementation) =  &self.variables.blocking_read().ble_server_implementation {
             ble_advertisement_implementation.start_server();
         };
     }
