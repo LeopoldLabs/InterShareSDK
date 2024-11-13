@@ -69,7 +69,6 @@ pub trait NearbyConnectionDelegate: Send + Sync + Debug {
 }
 
 pub struct NearbyServerLockedVariables {
-    pub device_connection_info: DeviceConnectionInfo,
     tcp_server: Option<TcpServer>,
     ble_server_implementation: Option<Box<dyn BleServerImplementationDelegate>>,
     ble_l2_cap_client: Option<Box<dyn L2CapDelegate>>,
@@ -80,7 +79,8 @@ pub struct NearbyServerLockedVariables {
 }
 
 pub struct NearbyServer {
-    pub variables: Arc<RwLock<NearbyServerLockedVariables>>
+    pub variables: Arc<RwLock<NearbyServerLockedVariables>>,
+    pub device_connection_info: RwLock<DeviceConnectionInfo>,
 }
 
 impl NearbyServer {
@@ -92,14 +92,15 @@ impl NearbyServer {
             ble: None,
             tcp: None
         };
+        
         let nearby_connection_delegate = match delegate {
             Some(d) => Some(Arc::new(std::sync::Mutex::new(d))),
             None => None
         };
 
         return Self {
+            device_connection_info: RwLock::new(device_connection_info),
             variables: Arc::new(RwLock::new(NearbyServerLockedVariables {
-                device_connection_info,
                 tcp_server: None,
                 ble_server_implementation: None,
                 ble_l2_cap_client: None,
@@ -120,15 +121,15 @@ impl NearbyServer {
     }
 
     pub fn change_device(&self, new_device: Device) {
-        self.variables.blocking_write().device_connection_info.device = Some(new_device);
+        self.device_connection_info.blocking_write().device = Some(new_device);
     }
 
     pub fn set_bluetooth_le_details(&self, ble_info: BluetoothLeConnectionInfo) {
-        self.variables.blocking_write().device_connection_info.ble = Some(ble_info)
+        self.device_connection_info.blocking_write().ble = Some(ble_info)
     }
 
     pub fn set_tcp_details(&self, tcp_info: TcpConnectionInfo) {
-        self.variables.blocking_write().device_connection_info.tcp = Some(tcp_info)
+        self.device_connection_info.blocking_write().tcp = Some(tcp_info)
     }
 
     pub fn get_current_ip(&self) -> Option<String> {
@@ -163,7 +164,7 @@ impl NearbyServer {
 
                     tcp_server.start_loop();
 
-                    self.variables.write().await.device_connection_info.tcp = Some(TcpConnectionInfo {
+                    self.device_connection_info.write().await.tcp = Some(TcpConnectionInfo {
                         hostname: my_local_ip,
                         port: tcp_server.port as u32,
                     });
@@ -177,7 +178,7 @@ impl NearbyServer {
 
         self.variables.write().await.advertise = true;
 
-        if let Some(ble_advertisement_implementation) =  &self.variables.blocking_read().ble_server_implementation {
+        if let Some(ble_advertisement_implementation) =  &self.variables.read().await.ble_server_implementation {
             ble_advertisement_implementation.start_server();
         };
     }
@@ -409,7 +410,7 @@ impl NearbyServer {
         };
 
         let transfer_request = TransferRequest {
-            device: self.variables.read().await.device_connection_info.device.clone(),
+            device: self.device_connection_info.read().await.device.clone(),
             intent: Some(Intent::FileTransfer(FileTransferIntent {
                 file_name,
                 file_size,
@@ -510,7 +511,7 @@ impl NearbyServer {
     }
 
     pub fn get_device_name(&self) -> Option<String> {
-        let device = self.variables.blocking_read().device_connection_info.device.clone();
+        let device = self.device_connection_info.blocking_read().device.clone();
         return Some(device?.name)
     }
 }
