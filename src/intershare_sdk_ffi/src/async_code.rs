@@ -51,10 +51,7 @@ impl InternalNearbyServer {
             return DeviceDiscoveryMessage {
                 content: Some(
                     Content::DeviceConnectionInfo(
-                        self.handler.variables
-                            .read()
-                            .await
-                            .device_connection_info.clone()
+                        self.handler.device_connection_info.read().await.clone()
                     )
                 ),
             }.encode_length_delimited_to_vec();
