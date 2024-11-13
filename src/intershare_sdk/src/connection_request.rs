@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::sync::atomic::{AtomicBool, Ordering};
-use log::warn;
+use log::{error, warn};
 use prost_stream::Stream;
 use protocol::communication::transfer_request::Intent;
 use protocol::communication::{ClipboardTransferIntent, FileTransferIntent, TransferRequest, TransferRequestResponse};
@@ -164,7 +164,7 @@ impl ConnectionRequest {
                 Some(files)
             }
             Err(error) => {
-                println!("Error {:?}", error);
+                error!("Error while unzipping: {:?}", error);
                 self.update_progress(ReceiveProgressState::Cancelled);
                 None
             }
