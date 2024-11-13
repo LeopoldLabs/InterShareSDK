@@ -777,6 +777,8 @@ public protocol InternalNearbyServerProtocol: AnyObject {
 
     func getCurrentIp() -> String?
 
+    func getDeviceName() -> String?
+
     func handleIncomingBleConnection(connectionId: String, nativeStream: NativeStreamDelegate)
 
     func handleIncomingConnection(nativeStreamHandle: NativeStreamDelegate)
@@ -882,6 +884,15 @@ open class InternalNearbyServer:
             try!
                 rustCall {
                     uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_get_current_ip(self.uniffiClonePointer(), $0)
+                }
+        )
+    }
+
+    open func getDeviceName() -> String? {
+        return try! FfiConverterOptionString.lift(
+            try!
+                rustCall {
+                    uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_get_device_name(self.uniffiClonePointer(), $0)
                 }
         )
     }
@@ -2728,10 +2739,10 @@ private func uniffiFutureContinuationCallback(handle: UInt64, pollResult: Int8) 
     }
 }
 
-public func getBleCharacteristicUuid() -> String {
+public func getBleDiscoveryCharacteristicUuid() -> String {
     return try! FfiConverterString.lift(
         try! rustCall {
-            uniffi_intershare_sdk_ffi_fn_func_get_ble_characteristic_uuid($0)
+            uniffi_intershare_sdk_ffi_fn_func_get_ble_discovery_characteristic_uuid($0)
         }
     )
 }
@@ -2760,7 +2771,7 @@ private var initializationResult: InitializationResult {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_func_get_ble_characteristic_uuid() != 9838 {
+    if uniffi_intershare_sdk_ffi_checksum_func_get_ble_discovery_characteristic_uuid() != 9198 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_ffi_checksum_func_get_ble_service_uuid() != 25811 {
@@ -2818,6 +2829,9 @@ private var initializationResult: InitializationResult {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_get_current_ip() != 38462 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_get_device_name() != 59652 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_handle_incoming_ble_connection() != 34219 {

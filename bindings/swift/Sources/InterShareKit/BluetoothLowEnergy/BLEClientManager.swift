@@ -75,7 +75,7 @@ public class BLEClientManager: NSObject, BleDiscoveryImplementationDelegate, CBC
             return
         }
 
-        peripheral.discoverCharacteristics([CharacteristicUUID], for: service)
+        peripheral.discoverCharacteristics([DiscoveryCharacteristicUUID], for: service)
     }
 
     public func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
@@ -84,7 +84,7 @@ public class BLEClientManager: NSObject, BleDiscoveryImplementationDelegate, CBC
             return
         }
 
-        let characteristic = service.characteristics?.first(where: { $0.uuid == CharacteristicUUID })
+        let characteristic = service.characteristics?.first(where: { $0.uuid == DiscoveryCharacteristicUUID })
 
         if let characteristic = characteristic {
             peripheral.readValue(for: characteristic)

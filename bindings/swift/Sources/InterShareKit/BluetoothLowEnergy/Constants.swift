@@ -9,4 +9,5 @@ import Foundation
 import CoreBluetooth
 
 let ServiceUUID = CBUUID.init(string: getBleServiceUuid())
-let CharacteristicUUID = CBUUID.init(string: getBleCharacteristicUuid())
+let DiscoveryCharacteristicUUID = CBUUID.init(string: getBleCharacteristicUuid())
+let WriteCharacteristicUUID = CBUUID.init(string: getBleCharacteristicUuid())

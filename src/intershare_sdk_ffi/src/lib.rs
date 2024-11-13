@@ -1,7 +1,7 @@
 use std::io;
 use std::sync::Arc;
 
-pub use intershare_sdk::{BLE_CHARACTERISTIC_UUID, BLE_SERVICE_UUID, ClipboardTransferIntent};
+pub use intershare_sdk::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID, ClipboardTransferIntent};
 pub use intershare_sdk::connection_request::{ConnectionRequest, ReceiveProgressState, ReceiveProgressDelegate};
 pub use intershare_sdk::Device;
 pub use intershare_sdk::discovery::{BleDiscoveryImplementationDelegate, Discovery};
@@ -35,8 +35,12 @@ pub fn get_ble_service_uuid() -> String {
     return BLE_SERVICE_UUID.to_string();
 }
 
-pub fn get_ble_characteristic_uuid() -> String {
-    return BLE_CHARACTERISTIC_UUID.to_string();
+pub fn get_ble_discovery_characteristic_uuid() -> String {
+    return BLE_DISCOVERY_CHARACTERISTIC_UUID.to_string();
+}
+
+pub fn get_ble_write_characteristic_uuid() -> String {
+    return BLE_WRITE_CHARACTERISTIC_UUID.to_string();
 }
 
 pub struct InternalDiscovery {

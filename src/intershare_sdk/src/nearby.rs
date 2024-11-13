@@ -281,7 +281,7 @@ impl NearbyServer {
             progress_delegate.progress_changed(state);
         }
     }
-    
+
     fn normalize_path(path: &Path) -> String {
         // Convert the path to a string using to_string_lossy()
         // and replace platform-specific separators (`\` on Windows) with `/`
@@ -507,5 +507,10 @@ impl NearbyServer {
         if let Some(ble_advertisement_implementation) = &self.variables.blocking_read().ble_server_implementation {
             ble_advertisement_implementation.stop_server();
         }
+    }
+
+    pub fn get_device_name(&self) -> Option<String> {
+        let device = self.variables.blocking_read().device_connection_info.device.clone();
+        return Some(device?.name)
     }
 }

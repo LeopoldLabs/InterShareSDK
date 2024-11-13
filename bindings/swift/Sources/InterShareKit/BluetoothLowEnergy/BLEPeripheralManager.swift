@@ -67,18 +67,26 @@ class BLEPeripheralManager: NSObject, BleServerImplementationDelegate, CBPeriphe
     
     func addService() {
         let service = CBMutableService(type: ServiceUUID, primary: true)
-        let characteristic = CBMutableCharacteristic(
-            type: CharacteristicUUID,
+        let discoveryCharacteristic = CBMutableCharacteristic(
+            type: DiscoveryCharacteristicUUID,
             properties: [.read],
             value: nil,
             permissions: CBAttributePermissions.readable
         )
 
-        service.characteristics = [characteristic]
+        let writeCharacteristic = CBMutableCharacteristic(
+            type: WriteCharacteristicUUID,
+            properties: [.write],
+            value: nil,
+            permissions: CBAttributePermissions.writeable
+        )
+
+        service.characteristics = [discoveryCharacteristic, writeCharacteristic]
         
         peripheralManager.add(service)
 
         peripheralManager.startAdvertising([
+            CBAdvertisementDataLocalNameKey: internalHandler.getDeviceName() ?? "",
             CBAdvertisementDataServiceUUIDsKey: [ServiceUUID]
         ])
     }
@@ -94,6 +102,11 @@ class BLEPeripheralManager: NSObject, BleServerImplementationDelegate, CBPeriphe
             request.value = await internalHandler.getAdvertisementData()
             peripheral.respond(to: request, withResult: CBATTError.success)
         }
+    }
+    
+    
+    func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
+        
     }
     
     func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: Error?) {

@@ -1,8 +1,12 @@
 package com.julian_baumann.intershare_sdk.bluetoothLowEnergy
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.*
-import android.bluetooth.le.*
+import android.bluetooth.le.AdvertiseCallback
+import android.bluetooth.le.AdvertiseData
+import android.bluetooth.le.AdvertiseSettings
+import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.ParcelUuid
@@ -17,7 +21,7 @@ import java.util.*
 
 class BlePermissionNotGrantedException : Exception()
 val discoveryServiceUUID: UUID = UUID.fromString(getBleServiceUuid())
-val discoveryCharacteristicUUID: UUID = UUID.fromString(getBleCharacteristicUuid())
+val discoveryCharacteristicUUID: UUID = UUID.fromString(getBleDiscoveryCharacteristicUuid())
 
 internal class BLEPeripheralManager(private val context: Context, private val internalNearbyServer: InternalNearbyServer, private val bluetoothManager: BluetoothManager) : BleServerImplementationDelegate {
 
@@ -109,11 +113,12 @@ internal class BLEPeripheralManager(private val context: Context, private val in
         bluetoothGattServer?.close()
     }
 
+    @SuppressLint("MissingPermission")
     private fun startAdvertising() {
         val bluetoothLeAdvertiser: BluetoothLeAdvertiser? = bluetoothManager.adapter.bluetoothLeAdvertiser
+        bluetoothManager.adapter.setName(internalNearbyServer.getDeviceName())
 
         bluetoothLeAdvertiser?.let {
-
             val settings = AdvertiseSettings.Builder()
                 .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
                 .setConnectable(true)
@@ -126,11 +131,15 @@ internal class BLEPeripheralManager(private val context: Context, private val in
                 .addServiceUuid(ParcelUuid(discoveryServiceUUID))
                 .build()
 
+            val scanResult = AdvertiseData.Builder()
+                .setIncludeDeviceName(true)
+                .build()
+
             if (ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED) {
                 throw BlePermissionNotGrantedException()
             }
 
-            it.startAdvertising(settings, data, advertiseCallback)
+            it.startAdvertising(settings, data, scanResult, advertiseCallback)
         } ?: Log.w("InterShareSDK [BLE Manager]", "Failed to create advertiser")
     }
 

@@ -133,6 +133,7 @@ impl BleClient {
         // Connect to the device
         let device = BluetoothLEDevice::FromBluetoothAddressAsync(ble_address)?.get()?;
         let device_id = device.DeviceId()?.to_string();
+        let device_name = device.
         info!("Found device with ID: {:?}", device_id);
 
         // Get the GATT services

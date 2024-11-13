@@ -1,6 +1,6 @@
 namespace InterShareSDK {
     string get_ble_service_uuid();
-    string get_ble_characteristic_uuid();
+    string get_ble_discovery_characteristic_uuid();
 };
 
 dictionary Device {

@@ -99,4 +99,8 @@ impl InternalNearbyServer {
     pub fn handle_incoming_connection(&self, native_stream_handle: Box<dyn NativeStreamDelegate>) {
         self.handler.handle_incoming_connection(native_stream_handle);
     }
+
+    pub fn get_device_name(&self) -> Option<String> {
+        return self.handler.get_device_name()
+    }
 }
