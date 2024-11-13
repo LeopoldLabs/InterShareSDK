@@ -3,7 +3,7 @@ pub use intershare_sdk::nearby::NearbyServer as InternalNearbyServer;
 use intershare_sdk::protocol::discovery::device_discovery_message::Content;
 use intershare_sdk::protocol::discovery::DeviceDiscoveryMessage;
 use intershare_sdk::protocol::prost::Message;
-use intershare_sdk::{BLE_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
+use intershare_sdk::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
 use std::error::Error;
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, RwLock};
@@ -20,7 +20,7 @@ fn setup_gatt_server(nearby_server: Arc<InternalNearbyServer>) -> WinResult<Gatt
     let service_provider_result: GattServiceProviderResult = GattServiceProvider::CreateAsync(service_uuid)?.get()?;
     let gatt_service_provider = service_provider_result.ServiceProvider()?;
 
-    let characteristic_uuid = GUID::from(BLE_CHARACTERISTIC_UUID);
+    let characteristic_uuid = GUID::from(BLE_DISCOVERY_CHARACTERISTIC_UUID);
 
     let characteristic_parameters = GattLocalCharacteristicParameters::new()?;
     characteristic_parameters.SetCharacteristicProperties(
@@ -81,7 +81,7 @@ impl BleServer {
 }
 
 impl Debug for BleServer {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _: &mut Formatter<'_>) -> std::fmt::Result {
         return Ok(());
     }
 }

@@ -4,7 +4,7 @@ use std::{fs, thread};
 use std::fs::{File};
 use std::io::{Read, Write};
 use std::net::ToSocketAddrs;
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use std::sync::Arc;
 
 use local_ip_address::local_ip;

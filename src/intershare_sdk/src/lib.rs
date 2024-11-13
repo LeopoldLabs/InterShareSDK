@@ -16,7 +16,7 @@ use simplelog::{Config, WriteLogger};
 #[cfg(not(target_os="android"))]
 use log::{error, info, LevelFilter};
 #[cfg(not(target_os="android"))]
-use directories::{BaseDirs, ProjectDirs};
+use directories::{BaseDirs};
 
 
 pub use protocol;

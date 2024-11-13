@@ -19,7 +19,7 @@ use windows::{
 };
 use tokio::runtime::Handle;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
-use intershare_sdk::{BLE_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
+use intershare_sdk::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
 use intershare_sdk::discovery::BleDiscoveryImplementationDelegate;
 use uniffi::deps::log::{error, info};
 use crate::discovery::InternalDiscovery;
@@ -97,11 +97,16 @@ impl BleClient {
                 let discovered_devices = discovered_devices_clone.clone();
                 let internal_discovery = internal_discovery_clone.clone();
 
+                let advertisement = args.Advertisement()?;
+                let local_name = advertisement.LocalName()?.to_string();
+
+                info!("Discovered device: {}", local_name);
+
                 let mut devices = discovered_devices.lock().unwrap();
                 devices.push(ble_address);
 
                 runtime_handle.spawn(async move {
-                    if let Err(e) = BleClient::connect_and_read_characteristic(ble_address, internal_discovery).await {
+                    if let Err(e) = BleClient::connect_and_read_characteristic(ble_address, internal_discovery, local_name).await {
                         error!("Error connecting to device: {:?}", e);
                     }
                 });
@@ -129,38 +134,38 @@ impl BleClient {
     async fn connect_and_read_characteristic(
         ble_address: u64,
         internal_discovery: Arc<Mutex<InternalDiscovery>>,
+        device_name: String
     ) -> Result<()> {
         // Connect to the device
         let device = BluetoothLEDevice::FromBluetoothAddressAsync(ble_address)?.get()?;
         let device_id = device.DeviceId()?.to_string();
-        let device_name = device.
-        info!("Found device with ID: {:?}", device_id);
+        info!("Found device with name: \"{:?}\" ID: {:?}", device_name, device_id);
 
         // Get the GATT services
         let services_result = device.GetGattServicesForUuidAsync(GUID::from(BLE_SERVICE_UUID))?.get()?;
         if services_result.Status()? != GattCommunicationStatus::Success {
-            error!("[{:?}] Failed to get GATT services", device_id);
+            error!("[{}, {:?}] Failed to get GATT services", device_name, device_id);
             return Ok(());
         }
         let services = services_result.Services()?;
 
         if services.Size()? == 0 {
-            error!("[{:?}] No services found", device_id);
+            error!("[{}, {:?}] No services found", device_name, device_id);
             return Ok(());
         }
 
         let service = services.GetAt(0)?;
 
         // Get the characteristics
-        let characteristics_result = service.GetCharacteristicsForUuidAsync(GUID::from(BLE_CHARACTERISTIC_UUID))?.get()?;
+        let characteristics_result = service.GetCharacteristicsForUuidAsync(GUID::from(BLE_DISCOVERY_CHARACTERISTIC_UUID))?.get()?;
         if characteristics_result.Status()? != GattCommunicationStatus::Success {
-            error!("[{:?}] Failed to get characteristics", device_id);
+            error!("[{}, {:?}] Failed to get characteristics", device_name, device_id);
             return Ok(());
         }
         let characteristics = characteristics_result.Characteristics()?;
 
         if characteristics.Size()? == 0 {
-            error!("[{:?}] No characteristics found", device_id);
+            error!("[{}, {:?}] No characteristics found", device_name, device_id);
             return Ok(());
         }
 
@@ -169,7 +174,7 @@ impl BleClient {
         // Read the characteristic value
         let read_result = characteristic.ReadValueAsync()?.get()?;
         if read_result.Status()? != GattCommunicationStatus::Success {
-            error!("[{:?}] Failed to read characteristic", device_id);
+            error!("[{}, {:?}] Failed to read characteristic", device_name, device_id);
             return Ok(());
         }
         let value = read_result.Value()?;

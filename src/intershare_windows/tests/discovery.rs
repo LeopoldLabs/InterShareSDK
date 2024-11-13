@@ -11,7 +11,7 @@ impl DiscoveryDelegate for DiscoveryTestDelegate {
         println!("Device added: {:?}", value);
     }
 
-    fn device_removed(&self, device_id: String) {
+    fn device_removed(&self, _device_id: String) {
         todo!()
     }
 }
