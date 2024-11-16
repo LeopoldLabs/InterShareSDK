@@ -13,8 +13,8 @@ pub struct InternalNearbyServer {
 #[uniffi::export(async_runtime = "tokio")]
 impl InternalNearbyServer {
     #[uniffi::constructor]
-    pub fn new(my_device: Device, file_storage: String, delegate: Option<Box<dyn NearbyConnectionDelegate>>) -> Self {
-        let server = NearbyServer::new(my_device, file_storage, delegate);
+    pub fn new(my_device: Device, file_storage: String, delegate: Option<Box<dyn NearbyConnectionDelegate>>, tmp_dir: Option<String>) -> Self {
+        let server = NearbyServer::new(my_device, file_storage, delegate, tmp_dir);
 
         Self {
             handler: server

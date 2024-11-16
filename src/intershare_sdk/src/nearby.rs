@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::{fs, thread};
-use std::fs::{File};
+use std::thread;
+use std::fs::File;
 use std::io::{Read, Write};
 use std::net::ToSocketAddrs;
-use std::path::{Path};
+use std::path::Path;
 use std::sync::Arc;
 
 use local_ip_address::local_ip;
@@ -28,6 +28,7 @@ use crate::encryption::{EncryptedReadWrite, EncryptedStream};
 use crate::errors::ConnectErrors;
 use crate::stream::NativeStreamDelegate;
 use crate::transmission::tcp::{TcpClient, TcpServer};
+use crate::zip::zip_directory;
 
 pub trait BleServerImplementationDelegate: Send + Sync + Debug {
     fn start_server(&self);
@@ -81,10 +82,11 @@ pub struct NearbyServerLockedVariables {
 pub struct NearbyServer {
     pub variables: Arc<RwLock<NearbyServerLockedVariables>>,
     pub device_connection_info: RwLock<DeviceConnectionInfo>,
+    pub tmp_dir: Option<String>
 }
 
 impl NearbyServer {
-    pub fn new(my_device: Device, file_storage: String, delegate: Option<Box<dyn NearbyConnectionDelegate>>) -> Self {
+    pub fn new(my_device: Device, file_storage: String, delegate: Option<Box<dyn NearbyConnectionDelegate>>, tmp_dir: Option<String>) -> Self {
         init_logger();
 
         let device_connection_info = DeviceConnectionInfo {
@@ -92,13 +94,14 @@ impl NearbyServer {
             ble: None,
             tcp: None
         };
-        
+
         let nearby_connection_delegate = match delegate {
             Some(d) => Some(Arc::new(std::sync::Mutex::new(d))),
             None => None
         };
 
         return Self {
+            tmp_dir,
             device_connection_info: RwLock::new(device_connection_info),
             variables: Arc::new(RwLock::new(NearbyServerLockedVariables {
                 tcp_server: None,
@@ -153,7 +156,7 @@ impl NearbyServer {
             };
 
             let file_storage = self.variables.read().await.file_storage.clone();
-            let tcp_server = TcpServer::new(delegate, file_storage).await;
+            let tcp_server = TcpServer::new(delegate, file_storage, self.tmp_dir.clone()).await;
 
             if let Ok(tcp_server) = tcp_server {
                 let ip = self.get_current_ip();
@@ -283,76 +286,12 @@ impl NearbyServer {
         }
     }
 
-    fn normalize_path(path: &Path) -> String {
-        // Convert the path to a string using to_string_lossy()
-        // and replace platform-specific separators (`\` on Windows) with `/`
-        let path_str = path.to_string_lossy();
-        path_str.replace(std::path::MAIN_SEPARATOR, "/")
-    }
+    fn create_tmp_file(&self) -> NamedTempFile {
+        #[cfg(not(target_os="android"))]
+        return NamedTempFile::new().expect("Failed to create temporary ZIP file.");
 
-    fn zip_directory(&self, zip: &mut ZipWriter<File>, base_dir: &Path, current_dir: &Path, prefix: Option<&str>) {
-        // Calculate the relative path based on the base directory
-        let relative_path = current_dir.strip_prefix(base_dir).unwrap_or(current_dir);
-        let relative_path_str = if let Some(prefix) = prefix {
-            Self::normalize_path(&Path::new(prefix).join(relative_path))
-        } else {
-            Self::normalize_path(relative_path)
-        };
-
-        info!("Zipping directory: {:?}", relative_path_str);
-
-        // Create the directory in the ZIP archive
-        if let Err(error) = zip.add_directory(&relative_path_str, SimpleFileOptions::default()) {
-            error!("Error while trying to create ZIP directory: {:?}", error);
-            return;
-        }
-
-        // Iterate through the directory entries
-        for entry in fs::read_dir(current_dir).expect("Failed to read directory.") {
-            let entry = match entry {
-                Ok(entry) => entry,
-                Err(e) => {
-                    error!("Failed to get entry: {:?}", e);
-                    continue;
-                }
-            };
-
-            let entry_path = entry.path();
-
-            if entry_path.is_dir() {
-                // Recursively zip subdirectories
-                self.zip_directory(zip, base_dir, &entry_path, prefix);
-            } else {
-                // Get the relative file path and normalize it
-                let file_name = entry_path.strip_prefix(base_dir).unwrap_or(&entry_path);
-                let zip_file_name = if let Some(prefix) = prefix {
-                    Self::normalize_path(&Path::new(prefix).join(file_name))
-                } else {
-                    Self::normalize_path(file_name)
-                };
-
-                info!("Adding file to ZIP: {:?}", zip_file_name);
-
-                // Add the file to the ZIP archive
-                if let Err(error) = zip.start_file(&zip_file_name, SimpleFileOptions::default()) {
-                    error!("Failed to start file in ZIP: {:?}", error);
-                    continue;
-                }
-
-                // Copy the file contents to the ZIP archive
-                let mut file = match File::open(&entry_path) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        error!("Failed to open file {:?}: {:?}", entry_path, e);
-                        continue;
-                    }
-                };
-
-                if let Err(error) = std::io::copy(&mut file, zip) {
-                    error!("Failed to copy file {:?} to ZIP: {:?}", entry_path, error);
-                }
-            }
-        }
+        #[cfg(target_os="android")]
+        return NamedTempFile::new_in(self.tmp_dir.clone().expect("tmp dir is not set on android")).expect("Failed to create temporary ZIP file.");
     }
 
     pub async fn send_files(&self, receiver: Device, file_paths: Vec<String>, progress_delegate: Option<Box<dyn SendProgressDelegate>>) -> Result<(), ConnectErrors> {
@@ -371,18 +310,18 @@ impl NearbyServer {
         NearbyServer::update_progress(&progress_delegate, SendProgressState::Compressing);
         info!("Compressing");
 
-        let mut tmp_file = NamedTempFile::new().expect("Failed to create temporary ZIP file.");
-        let mut zip = zip::ZipWriter::new(tmp_file.reopen().expect("Failed to reopen tmp file"));
+        let mut tmp_file = self.create_tmp_file();
+        let mut zip = ZipWriter::new(tmp_file.reopen().expect("Failed to reopen tmp file"));
 
         for file_path in &file_paths {
             let file = Path::new(file_path);
 
             if file.is_dir() {
                 let prefix = file.file_name().unwrap().to_string_lossy().to_string();
-                self.zip_directory(&mut zip, file, file, Some(&prefix));
+                zip_directory(&mut zip, file, file, Some(&prefix));
             } else {
                 info!("Compressing file: {:?}", file);
-                zip.start_file(convert_os_str(file.file_name().unwrap()).unwrap(), SimpleFileOptions::default())
+                zip.start_file(convert_os_str(file.file_name().unwrap()), SimpleFileOptions::default())
                     .unwrap();
 
                 let mut file = File::open(file_path).unwrap();
@@ -403,7 +342,7 @@ impl NearbyServer {
         let file_name = {
             if file_paths.len() == 1 {
                 let path = Path::new(file_paths.first().unwrap());
-                Some(convert_os_str(path.file_name().expect("Failed to get file name")).expect("Failed to parse OS String"))
+                Some(convert_os_str(path.file_name().expect("Failed to get file name")))
             } else {
                 None
             }
@@ -472,6 +411,7 @@ impl NearbyServer {
         };
 
         let file_storage = self.variables.blocking_read().file_storage.clone();
+        let tmp_dir = self.tmp_dir.clone();
 
         thread::spawn(move || {
             let mut encrypted_stream = match initiate_receiver_communication(native_stream_handle) {
@@ -494,7 +434,8 @@ impl NearbyServer {
             let connection_request = ConnectionRequest::new(
                 transfer_request,
                 Box::new(encrypted_stream),
-                file_storage.clone()
+                file_storage.clone(),
+                tmp_dir
             );
 
             delegate.lock().expect("Failed to lock delegate").received_connection_request(Arc::new(connection_request));

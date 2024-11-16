@@ -15,11 +15,12 @@ pub struct TcpServer {
     pub port: u16,
     listener: TcpListener,
     delegate: Arc<Mutex<Box<dyn NearbyConnectionDelegate>>>,
-    file_storage: String
+    file_storage: String,
+    tmp_dir: Option<String>
 }
 
 impl TcpServer {
-    pub(crate) async fn new(delegate: Arc<Mutex<Box<dyn NearbyConnectionDelegate>>>, file_storage: String) -> Result<TcpServer, io::Error> {
+    pub(crate) async fn new(delegate: Arc<Mutex<Box<dyn NearbyConnectionDelegate>>>, file_storage: String, tmp_dir: Option<String>) -> Result<TcpServer, io::Error> {
         let addresses = [
             SocketAddr::from(([0, 0, 0, 0], 80)),
             SocketAddr::from(([0, 0, 0, 0], 8080)),
@@ -34,7 +35,8 @@ impl TcpServer {
             port,
             listener,
             delegate,
-            file_storage
+            file_storage,
+            tmp_dir
         });
     }
 
@@ -42,6 +44,7 @@ impl TcpServer {
         let listener = self.listener.try_clone().expect("Failed to clone listener");
         let delegate = self.delegate.clone();
         let file_storage = self.file_storage.clone();
+        let tmp_dir = self.tmp_dir.clone();
 
         thread::spawn(move || {
             loop {
@@ -69,7 +72,8 @@ impl TcpServer {
                 let connection_request = ConnectionRequest::new(
                     transfer_request,
                     Box::new(encrypted_stream),
-                    file_storage.clone()
+                    file_storage.clone(),
+                    tmp_dir.clone()
                 );
 
                 delegate.lock().expect("Failed to lock").received_connection_request(Arc::new(connection_request));

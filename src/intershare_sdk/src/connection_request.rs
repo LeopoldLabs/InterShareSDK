@@ -35,12 +35,14 @@ pub struct ConnectionRequest {
     connection: Arc<Mutex<Box<dyn EncryptedReadWrite>>>,
     file_storage: String,
     should_cancel: AtomicBool,
-    variables: Arc<RwLock<SharedVariables>>
+    variables: Arc<RwLock<SharedVariables>>,
+    tmp_dir: Option<String>
 }
 
 impl ConnectionRequest {
-    pub fn new(transfer_request: TransferRequest, connection: Box<dyn EncryptedReadWrite>, file_storage: String) -> Self {
+    pub fn new(transfer_request: TransferRequest, connection: Box<dyn EncryptedReadWrite>, file_storage: String, tmp_dir: Option<String>) -> Self {
         Self {
+            tmp_dir,
             transfer_request,
             connection: Arc::new(Mutex::new(connection)),
             file_storage,
@@ -125,8 +127,16 @@ impl ConnectionRequest {
         panic!("Not implemented yet");
     }
 
+    fn create_tmp_file(&self) -> NamedTempFile {
+        #[cfg(not(target_os="android"))]
+        return NamedTempFile::new().expect("Failed to create temporary ZIP file.");
+
+        #[cfg(target_os="android")]
+        return NamedTempFile::new_in(self.tmp_dir.clone().expect("tmp dir is not set on android")).expect("Failed to create temporary ZIP file.");
+    }
+
     fn handle_file(&self, mut stream: MutexGuard<Box<dyn EncryptedReadWrite>>, file_transfer: FileTransferIntent) -> Option<Vec<String>> {
-        let named_file = NamedTempFile::new().expect("Failed to create temporary ZIP file.");
+        let named_file = self.create_tmp_file();
         let mut zip_file = named_file.reopen().expect("Failed to reopen temporary ZIP file");
 
         let mut buffer = [0; BLE_BUFFER_SIZE];

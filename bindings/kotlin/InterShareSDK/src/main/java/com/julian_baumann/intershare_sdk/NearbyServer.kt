@@ -19,7 +19,13 @@ class NearbyServer(context: Context, myDevice: Device, delegate: NearbyConnectio
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     }
 
-    private val internal: InternalNearbyServer = InternalNearbyServer(myDevice, Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath, delegate)
+    private val internal: InternalNearbyServer = InternalNearbyServer(
+        myDevice,
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath,
+        delegate,
+        context.cacheDir.absolutePath
+    )
+
     private val internalBleImplementation = BLEPeripheralManager(context, internal, bluetoothManager)
     private val internalL2CapClient = L2CAPClientManager(internal)
     private var currentIPAddress: String? = null

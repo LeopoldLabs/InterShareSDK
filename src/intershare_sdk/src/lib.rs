@@ -41,8 +41,8 @@ pub const BLE_BUFFER_SIZE: usize = 1024;
 
 static INIT_LOGGER: Once = Once::new();
 
-fn convert_os_str(os_str: &OsStr) -> Option<String> {
-    os_str.to_str().map(|s| s.to_string())
+fn convert_os_str(os_str: &OsStr) -> String {
+    return os_str.to_string_lossy().to_string();
 }
 
 #[cfg(not(target_os="android"))]

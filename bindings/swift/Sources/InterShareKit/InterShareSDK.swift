@@ -826,12 +826,13 @@ open class InternalNearbyServer:
         return try! rustCall { uniffi_intershare_sdk_ffi_fn_clone_internalnearbyserver(self.pointer, $0) }
     }
 
-    public convenience init(myDevice: Device, fileStorage: String, delegate: NearbyConnectionDelegate?) {
+    public convenience init(myDevice: Device, fileStorage: String, delegate: NearbyConnectionDelegate?, tmpDir: String?) {
         self.init(unsafeFromRawPointer: try! rustCall {
             uniffi_intershare_sdk_ffi_fn_constructor_internalnearbyserver_new(
                 FfiConverterTypeDevice.lower(myDevice),
                 FfiConverterString.lower(fileStorage),
-                FfiConverterOptionCallbackInterfaceNearbyConnectionDelegate.lower(delegate), $0
+                FfiConverterOptionCallbackInterfaceNearbyConnectionDelegate.lower(delegate),
+                FfiConverterOptionString.lower(tmpDir), $0
             )
         })
     }
@@ -2861,7 +2862,7 @@ private var initializationResult: InitializationResult {
     if uniffi_intershare_sdk_ffi_checksum_constructor_internaldiscovery_new() != 26389 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_constructor_internalnearbyserver_new() != 55199 {
+    if uniffi_intershare_sdk_ffi_checksum_constructor_internalnearbyserver_new() != 61620 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_ffi_checksum_method_blediscoveryimplementationdelegate_start_scanning() != 4072 {

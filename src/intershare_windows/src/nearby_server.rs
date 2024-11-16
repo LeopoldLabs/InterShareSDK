@@ -19,7 +19,7 @@ impl NearbyServer {
         let downloads_dir = download_dir().expect("Failed to get downloads directory").to_string_lossy().to_string();
         info!("Downloads directory: {}", downloads_dir);
 
-        let nearby = Arc::new(InternalNearbyServer::new(my_device, downloads_dir, delegate));
+        let nearby = Arc::new(InternalNearbyServer::new(my_device, downloads_dir, delegate, None));
         let ble_server = BleServer::new(Arc::clone(&nearby))
             .expect("Failed to initialize BLE Server");
 
