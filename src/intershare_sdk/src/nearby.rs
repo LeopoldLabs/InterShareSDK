@@ -444,6 +444,11 @@ impl NearbyServer {
 
     pub fn stop(&self) {
         self.variables.blocking_write().advertise = false;
+
+        if let Some(tcp_server) = self.variables.blocking_write().tcp_server.as_mut() {
+            tcp_server.stop();
+        }
+
         self.variables.blocking_write().tcp_server = None;
 
         if let Some(ble_advertisement_implementation) = &self.variables.blocking_read().ble_server_implementation {

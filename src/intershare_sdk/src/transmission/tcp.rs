@@ -1,8 +1,10 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{io, thread};
 use std::net::SocketAddr;
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use log::info;
 use prost_stream::Stream;
 use protocol::communication::TransferRequest;
 
@@ -13,10 +15,11 @@ use crate::stream::Close;
 
 pub struct TcpServer {
     pub port: u16,
-    listener: TcpListener,
+    listener: Option<TcpListener>,
     delegate: Arc<Mutex<Box<dyn NearbyConnectionDelegate>>>,
     file_storage: String,
-    tmp_dir: Option<String>
+    tmp_dir: Option<String>,
+    running: Arc<AtomicBool>
 }
 
 impl TcpServer {
@@ -33,21 +36,23 @@ impl TcpServer {
 
         return Ok(Self {
             port,
-            listener,
+            listener: Some(listener),
             delegate,
             file_storage,
-            tmp_dir
+            tmp_dir,
+            running: Arc::new(AtomicBool::new(true))
         });
     }
 
     pub fn start_loop(&self) {
-        let listener = self.listener.try_clone().expect("Failed to clone listener");
+        let listener = self.listener.as_ref().expect("Listener is not initialized").try_clone().expect("Failed to clone listener");
         let delegate = self.delegate.clone();
         let file_storage = self.file_storage.clone();
         let tmp_dir = self.tmp_dir.clone();
+        let running = self.running.clone();
 
         thread::spawn(move || {
-            loop {
+            while running.load(Ordering::SeqCst) {
                 let Ok((tcp_stream, _socket_address)) = listener.accept() else {
                     continue
                 };
@@ -79,6 +84,32 @@ impl TcpServer {
                 delegate.lock().expect("Failed to lock").received_connection_request(Arc::new(connection_request));
             }
         });
+    }
+
+    pub fn stop(&self) {
+        self.running.store(false, Ordering::SeqCst);
+        let _ = drop(self.listener.as_ref());
+        info!("TCP server stopped.");
+    }
+
+    pub fn restart(&mut self) -> Result<(), io::Error> {
+        info!("TCP server restarting...");
+        self.stop();
+
+        let addresses = [
+            SocketAddr::from(([0, 0, 0, 0], 80)),
+            SocketAddr::from(([0, 0, 0, 0], 8080)),
+            SocketAddr::from(([0, 0, 0, 0], 0)),
+        ];
+
+        let listener = TcpListener::bind(&addresses[..])?;
+        listener.set_nonblocking(false).expect("Failed to set non blocking");
+        self.port = listener.local_addr()?.port();
+        self.listener = Some(listener);
+        self.running.store(true, Ordering::SeqCst);
+        self.start_loop();
+        info!("TCP server restarted.");
+        Ok(())
     }
 }
 

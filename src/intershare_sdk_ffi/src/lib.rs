@@ -16,7 +16,6 @@ pub use intershare_sdk::errors::*;
 pub use intershare_sdk::*;
 use intershare_sdk::protocol::discovery::{BluetoothLeConnectionInfo, TcpConnectionInfo};
 
-
 pub mod async_code;
 
 #[derive(Debug, thiserror::Error)]

@@ -65,7 +65,7 @@ public class NearbyServer {
     public var state: BluetoothState { get { bleServer.state } }
 
     public init(myDevice: Device, storage: String, delegate: NearbyServerDelegate) {
-        internalHandler = InternalNearbyServer(myDevice: myDevice, fileStorage: storage, delegate: delegate)
+        internalHandler = InternalNearbyServer(myDevice: myDevice, fileStorage: storage, delegate: delegate, tmpDir: nil)
         bleServer = BLEPeripheralManager(handler: internalHandler, delegate: delegate)
 
         internalHandler.addBleImplementation(bleImplementation: bleServer)
@@ -77,7 +77,7 @@ public class NearbyServer {
         queue = DispatchQueue.global(qos: .background)
         monitor.pathUpdateHandler = { [self] path in
             if path.status == .satisfied {
-                var newIp = internalHandler.getCurrentIp()
+                let newIp = internalHandler.getCurrentIp()
 
                 if self.lastKnownIp != newIp {
                     self.lastKnownIp = newIp
