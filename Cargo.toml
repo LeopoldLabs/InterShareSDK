@@ -4,9 +4,6 @@ resolver = "2"
 members = [
     "src/intershare_sdk",
     "src/intershare_sdk_ffi",
-    "src/protocol"
-]
-
-exclude = [
+    "src/protocol",
     "src/intershare_windows"
 ]

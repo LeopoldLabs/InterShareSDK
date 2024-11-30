@@ -88,7 +88,6 @@ impl TcpServer {
 
     pub fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
-        let _ = drop(self.listener.as_ref());
         info!("TCP server stopped.");
     }
 

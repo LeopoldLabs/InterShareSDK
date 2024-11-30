@@ -11,7 +11,7 @@ use tempfile::NamedTempFile;
 use tokio::sync::RwLock;
 use crate::{encryption::EncryptedReadWrite, nearby::ConnectionIntentType};
 use crate::zip::unzip_file;
-use crate::{BLE_BUFFER_SIZE};
+use crate::BLE_BUFFER_SIZE;
 
 pub enum ReceiveProgressState {
     Unknown,

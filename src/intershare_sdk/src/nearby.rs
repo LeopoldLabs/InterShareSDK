@@ -73,7 +73,6 @@ pub struct NearbyServerLockedVariables {
     tcp_server: Option<TcpServer>,
     ble_server_implementation: Option<Box<dyn BleServerImplementationDelegate>>,
     ble_l2_cap_client: Option<Box<dyn L2CapDelegate>>,
-    nearby_connection_delegate: Option<Arc<std::sync::Mutex<Box<dyn NearbyConnectionDelegate>>>>,
     pub advertise: bool,
     file_storage: String,
     l2cap_connections: HashMap<String, Sender<Box<dyn NativeStreamDelegate>>>
@@ -82,7 +81,8 @@ pub struct NearbyServerLockedVariables {
 pub struct NearbyServer {
     pub variables: Arc<RwLock<NearbyServerLockedVariables>>,
     pub device_connection_info: RwLock<DeviceConnectionInfo>,
-    pub tmp_dir: Option<String>
+    pub tmp_dir: Option<String>,
+    nearby_connection_delegate: Option<Arc<std::sync::Mutex<Box<dyn NearbyConnectionDelegate>>>>,
 }
 
 impl NearbyServer {
@@ -103,11 +103,11 @@ impl NearbyServer {
         return Self {
             tmp_dir,
             device_connection_info: RwLock::new(device_connection_info),
+            nearby_connection_delegate,
             variables: Arc::new(RwLock::new(NearbyServerLockedVariables {
                 tcp_server: None,
                 ble_server_implementation: None,
                 ble_l2_cap_client: None,
-                nearby_connection_delegate,
                 advertise: false,
                 file_storage,
                 l2cap_connections: HashMap::new()
@@ -149,7 +149,7 @@ impl NearbyServer {
 
     pub async fn start(&self) {
         if self.variables.read().await.tcp_server.is_none() {
-            let delegate = self.variables.read().await.nearby_connection_delegate.clone();
+            let delegate = self.nearby_connection_delegate.clone();
 
             let Some(delegate) = delegate else {
                 return;
@@ -404,7 +404,7 @@ impl NearbyServer {
     }
 
     pub fn handle_incoming_connection(&self, native_stream_handle: Box<dyn NativeStreamDelegate>) {
-        let delegate = self.variables.blocking_read().nearby_connection_delegate.clone();
+        let delegate = self.nearby_connection_delegate.clone();
 
         let Some(delegate) = delegate else {
             return;
