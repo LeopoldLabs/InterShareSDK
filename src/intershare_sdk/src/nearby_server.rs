@@ -69,13 +69,22 @@ pub trait NearbyConnectionDelegate: Send + Sync + Debug {
     fn received_connection_request(&self, request: Arc<ConnectionRequest>);
 }
 
+pub trait NearbyInstantReceiveDelegate: Send + Sync + Debug {
+    fn requested_instant_file_receive(&self, device: Device, request_id: String) -> bool;
+}
+
 pub struct NearbyServerLockedVariables {
     tcp_server: Option<TcpServer>,
     ble_server_implementation: Option<Box<dyn BleServerImplementationDelegate>>,
     ble_l2_cap_client: Option<Box<dyn L2CapDelegate>>,
     pub advertise: bool,
     file_storage: String,
-    l2cap_connections: HashMap<String, Sender<Box<dyn NativeStreamDelegate>>>
+}
+
+pub struct OngoingSendTransmission {
+    pub request_id: String,
+    pub file_paths: Vec<String>,
+    pub progress_delegate: Option<Box<dyn SendProgressDelegate>>
 }
 
 pub struct NearbyServer {
@@ -83,6 +92,7 @@ pub struct NearbyServer {
     pub device_connection_info: RwLock<DeviceConnectionInfo>,
     pub tmp_dir: Option<String>,
     nearby_connection_delegate: Option<Arc<std::sync::Mutex<Box<dyn NearbyConnectionDelegate>>>>,
+    l2cap_connections: Arc<RwLock<HashMap<String, Sender<Box<dyn NativeStreamDelegate>>>>>
 }
 
 impl NearbyServer {
@@ -104,13 +114,13 @@ impl NearbyServer {
             tmp_dir,
             device_connection_info: RwLock::new(device_connection_info),
             nearby_connection_delegate,
+            l2cap_connections: Arc::new(RwLock::new(HashMap::new())),
             variables: Arc::new(RwLock::new(NearbyServerLockedVariables {
                 tcp_server: None,
                 ble_server_implementation: None,
                 ble_l2_cap_client: None,
                 advertise: false,
-                file_storage,
-                l2cap_connections: HashMap::new()
+                file_storage
             }))
         };
     }
@@ -199,7 +209,7 @@ impl NearbyServer {
     }
 
     pub fn handle_incoming_ble_connection(&self, connection_id: String, native_stream: Box<dyn NativeStreamDelegate>) {
-        let sender = self.variables.blocking_write().l2cap_connections.remove(&connection_id);
+        let sender = self.l2cap_connections.blocking_write().remove(&connection_id);
 
         if let Some(sender) = sender {
             let _ = sender.send(native_stream);
@@ -248,6 +258,8 @@ impl NearbyServer {
             return Ok(encrypted_stream);
         }
 
+        info!("Could not connect via WiFi");
+
         if let Err(error) = encrypted_stream {
             error!("{:?}", error)
         }
@@ -257,10 +269,12 @@ impl NearbyServer {
             return Err(ConnectErrors::FailedToGetBleDetails);
         };
 
+        info!("Trying BLE...");
         let id = Uuid::new_v4().to_string();
         let (sender, receiver) = oneshot::channel::<Box<dyn NativeStreamDelegate>>();
 
-        self.variables.write().await.l2cap_connections.insert(id.clone(), sender);
+        self.l2cap_connections.write().await.insert(id.clone(), sender);
+        info!("Got a BLE connection!");
 
         if let Some(ble_l2cap_client) = &self.variables.read().await.ble_l2_cap_client {
             ble_l2cap_client.open_l2cap_connection(id.clone(), ble_connection_details.uuid.clone(), ble_connection_details.psm);

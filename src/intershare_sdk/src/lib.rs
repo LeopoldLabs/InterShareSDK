@@ -27,7 +27,7 @@ pub use protocol::DiscoveryDelegate;
 pub mod discovery;
 pub mod encryption;
 pub mod stream;
-pub mod nearby;
+pub mod nearby_server;
 pub mod transmission;
 pub mod communication;
 pub mod connection_request;
@@ -52,8 +52,12 @@ fn get_log_file_path() -> Option<PathBuf> {
 
     return Some(config_dir
         .join("InterShare")
-        .join( "intershare.log")
+        .join("intershare.log")
     )
+}
+#[cfg(target_os="android")]
+fn get_log_file_path() -> Option<PathBuf> {
+    return None;
 }
 
 #[cfg(target_os="android")]
@@ -95,6 +99,8 @@ pub fn init_logger() {
             fs::create_dir_all(parent).expect("Failed to create log directory");
         }
 
+        println!("Log file path: {:?}", log_file_path);
+
         // Initialize the logger
         let log_file = File::create(log_file_path).expect("Failed to create log file");
         WriteLogger::init(LevelFilter::Info, Config::default(), log_file)
@@ -102,7 +108,14 @@ pub fn init_logger() {
 
         set_panic_logger();
 
-
         info!("Logger initialized successfully.");
     });
+}
+
+pub fn get_log_file_path_str() -> Option<String> {
+    if let Ok(path) = get_log_file_path()?.into_os_string().into_string() {
+        return Some(path);
+    }
+
+    return None;
 }

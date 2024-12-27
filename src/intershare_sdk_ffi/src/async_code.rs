@@ -1,4 +1,4 @@
-pub use intershare_sdk::{nearby::{BleServerImplementationDelegate, L2CapDelegate, NearbyConnectionDelegate, NearbyServer, SendProgressDelegate}, Device};
+pub use intershare_sdk::{nearby_server::{BleServerImplementationDelegate, L2CapDelegate, NearbyConnectionDelegate, NearbyServer, SendProgressDelegate}, Device};
 pub use intershare_sdk::protocol::discovery::{BluetoothLeConnectionInfo, DeviceDiscoveryMessage, TcpConnectionInfo};
 use intershare_sdk::protocol::discovery::device_discovery_message::Content;
 use intershare_sdk::protocol::prost::Message;

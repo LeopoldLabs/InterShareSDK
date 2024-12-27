@@ -10,7 +10,7 @@ use protocol::communication::TransferRequest;
 
 use crate::communication::initiate_receiver_communication;
 use crate::connection_request::ConnectionRequest;
-use crate::nearby::NearbyConnectionDelegate;
+use crate::nearby_server::NearbyConnectionDelegate;
 use crate::stream::Close;
 
 pub struct TcpServer {

@@ -108,6 +108,8 @@ mkdir bindings/swift/.out/macos
 mkdir bindings/swift/.out/ios
 mkdir bindings/swift/.out/ios-simulator
 
+export MACOSX_DEPLOYMENT_TARGET=13.0
+
 # iOS
 BuildStaticLibrary aarch64-apple-ios
 

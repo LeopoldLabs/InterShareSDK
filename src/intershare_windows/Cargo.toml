@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "intershare_sdk_ffi"
+name = "intershare_windows_sdk_ffi"
 crate-type = ["lib", "staticlib", "cdylib"]
 
 [[bin]]
@@ -19,9 +19,7 @@ winapi = { version = "0.3.9", features = ["winsock2"] }
 widestring = "1.1.0"
 futures = "0.3.31"
 dirs = "5.0.1"
+uniffi = { version = "0.28.3", features = ["cli", "tokio", "default"] }
 
-[dependencies]
-uniffi = { version = "0.25.3", features = ["cli", "tokio", "default"] }
-
-[build-dependencies]
-uniffi = { version = "0.25.3",  features = ["build"] }
+[target.'cfg(windows)'.build-dependencies]
+uniffi = { version = "0.28.3",  features = ["build"] }

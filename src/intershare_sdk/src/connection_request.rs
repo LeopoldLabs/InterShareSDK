@@ -9,7 +9,7 @@ use protocol::communication::{ClipboardTransferIntent, FileTransferIntent, Trans
 use protocol::discovery::Device;
 use tempfile::NamedTempFile;
 use tokio::sync::RwLock;
-use crate::{encryption::EncryptedReadWrite, nearby::ConnectionIntentType};
+use crate::{encryption::EncryptedReadWrite, nearby_server::ConnectionIntentType};
 use crate::zip::unzip_file;
 use crate::BLE_BUFFER_SIZE;
 

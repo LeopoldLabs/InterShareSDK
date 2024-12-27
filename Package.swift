@@ -7,7 +7,7 @@ let package = Package(
     name: "InterShareKit",
     platforms: [
         .iOS(.v15),
-        .macOS(.v12)
+        .macOS(.v13)
     ],
     products: [
         .library(

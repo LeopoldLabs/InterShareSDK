@@ -4,6 +4,5 @@ resolver = "2"
 members = [
     "src/intershare_sdk",
     "src/intershare_sdk_ffi",
-    "src/protocol",
-    "src/intershare_windows"
+    "src/protocol"
 ]
