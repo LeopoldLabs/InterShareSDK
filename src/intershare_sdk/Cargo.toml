@@ -24,6 +24,6 @@ prost-stream = "0.1.2"
 android_logger = "0.13.3"
 log = "0.4.20"
 tempfile = "3"
-zip = "2.2.2"
+zip = { version = "2.2.2", default-features = false, features = ["aes-crypto", "deflate", "deflate64", "lzma", "time", "zstd"]}
 simplelog = "0.12.2"
 directories = "5.0"
