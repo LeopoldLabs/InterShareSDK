@@ -109,14 +109,18 @@ public class NearbyServer {
 
     @available(macOS 13.0, *)
     @available(iOS 14.0, *)
-    public func send(urls: [String], allowConvienienceShare: Bool = true, progress: ShareProgressDelegate?) async -> ShareStore {
-        return await internalHandler.shareFiles(filePaths: urls, allowConvienienceShare: allowConvienienceShare, progressDelegate: progress)
+    public func share(urls: [String], allowConvenienceShare: Bool = true, progress: ShareProgressDelegate?) async -> ShareStore {
+        return await internalHandler.shareFiles(filePaths: urls, allowConvenienceShare: allowConvenienceShare, progressDelegate: progress)
+    }
+    
+    public func requestDownload(link: String) async throws {
+        try await internalHandler.requestDownload(link: link)
     }
 
-    public func stop() throws {
+    public func stop() async throws {
         try bleServer.ensureValidState()
 
-        internalHandler.stop()
+        await internalHandler.stop()
         serverRunning = false
     }
 }

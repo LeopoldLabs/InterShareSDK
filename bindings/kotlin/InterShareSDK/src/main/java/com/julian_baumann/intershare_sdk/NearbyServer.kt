@@ -7,6 +7,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Environment
+import android.provider.MediaStore.Downloads
 import android.util.Log
 import com.julian_baumann.intershare_sdk.bluetoothLowEnergy.BLEPeripheralManager
 import com.julian_baumann.intershare_sdk.bluetoothLowEnergy.L2CAPClientManager
@@ -108,8 +109,12 @@ class NearbyServer(context: Context, myDevice: Device, delegate: NearbyConnectio
         internal.changeDevice(newDevice)
     }
 
-    suspend fun sendFiles(urls: List<String>, to: Device, progressDelegate: SendProgressDelegate?) {
-        internal.sendFiles(to, urls, progressDelegate)
+    suspend fun shareFiles(urls: List<String>, allowConvenienceDownload: Boolean, progressDelegate: ShareProgressDelegate?): ShareStore {
+        return internal.shareFiles(urls, allowConvenienceDownload, progressDelegate)
+    }
+
+    suspend fun requestDownload(link: String) {
+        return internal.requestDownload(link)
     }
 
     suspend fun stop() {
