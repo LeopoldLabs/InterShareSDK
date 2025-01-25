@@ -2,9 +2,10 @@ use std::io;
 use std::io::{Error, Read, Write};
 use std::io::ErrorKind::Other;
 use std::iter::repeat;
-use rand_core::OsRng;
+use rand_core::{OsRng, RngCore};
 use chacha20::XChaCha20;
 use chacha20::cipher::{KeyIvInit, StreamCipher};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
 use crate::stream::Close;
 
@@ -12,6 +13,12 @@ pub fn generate_key() -> [u8; 32] {
     let key = XChaCha20::generate_key(&mut OsRng);
 
     return key.into();
+}
+
+pub fn generate_secure_base64_token(byte_length: usize) -> String {
+    let mut bytes = vec![0u8; byte_length];
+    OsRng.fill_bytes(&mut bytes);
+    return URL_SAFE_NO_PAD.encode(&bytes)
 }
 
 pub fn generate_iv() -> [u8; 24] {

@@ -398,6 +398,22 @@ private class UniffiHandleMap<T> {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
+private struct FfiConverterUInt8: FfiConverterPrimitive {
+    typealias FfiType = UInt8
+    typealias SwiftType = UInt8
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt8 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: UInt8, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
 private struct FfiConverterUInt32: FfiConverterPrimitive {
     typealias FfiType = UInt32
     typealias SwiftType = UInt32
@@ -456,6 +472,30 @@ private struct FfiConverterDouble: FfiConverterPrimitive {
 
     public static func write(_ value: Double, into buf: inout [UInt8]) {
         writeDouble(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+private struct FfiConverterBool: FfiConverter {
+    typealias FfiType = Int8
+    typealias SwiftType = Bool
+
+    public static func lift(_ value: Int8) throws -> Bool {
+        return value != 0
+    }
+
+    public static func lower(_ value: Bool) -> Int8 {
+        return value ? 1 : 0
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Bool {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Bool, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
     }
 }
 
@@ -838,21 +878,21 @@ public protocol InternalNearbyServerProtocol: AnyObject {
 
     func getDeviceName() -> String?
 
-    func handleIncomingBleConnection(connectionId: String, nativeStream: NativeStreamDelegate)
-
     func handleIncomingConnection(nativeStreamHandle: NativeStreamDelegate)
 
-    func restartServer() async
+    func requestDownload(link: String) async throws
 
-    func sendFiles(receiver: Device, filePaths: [String], progressDelegate: SendProgressDelegate?) async throws
+    func restartServer() async
 
     func setBleConnectionDetails(bleDetails: BluetoothLeConnectionInfo)
 
     func setTcpDetails(tcpDetails: TcpConnectionInfo)
 
+    func shareFiles(filePaths: [String], allowConvenienceShare: Bool, progressDelegate: ShareProgressDelegate?) async -> ShareStore
+
     func start() async
 
-    func stop()
+    func stop() async
 }
 
 open class InternalNearbyServer:
@@ -961,17 +1001,27 @@ open class InternalNearbyServer:
         })
     }
 
-    open func handleIncomingBleConnection(connectionId: String, nativeStream: NativeStreamDelegate) { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_handle_incoming_ble_connection(self.uniffiClonePointer(),
-                                                                                                FfiConverterString.lower(connectionId),
-                                                                                                FfiConverterCallbackInterfaceNativeStreamDelegate.lower(nativeStream), $0)
-    }
-    }
-
     open func handleIncomingConnection(nativeStreamHandle: NativeStreamDelegate) { try! rustCall {
         uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_handle_incoming_connection(self.uniffiClonePointer(),
                                                                                             FfiConverterCallbackInterfaceNativeStreamDelegate.lower(nativeStreamHandle), $0)
     }
+    }
+
+    open func requestDownload(link: String) async throws {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_request_download(
+                        self.uniffiClonePointer(),
+                        FfiConverterString.lower(link)
+                    )
+                },
+                pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_void,
+                completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_void,
+                freeFunc: ffi_intershare_sdk_ffi_rust_future_free_void,
+                liftFunc: { $0 },
+                errorHandler: FfiConverterTypeRequestConvenienceShareErrors.lift
+            )
     }
 
     open func restartServer() async {
@@ -990,23 +1040,6 @@ open class InternalNearbyServer:
             )
     }
 
-    open func sendFiles(receiver: Device, filePaths: [String], progressDelegate: SendProgressDelegate?) async throws {
-        return
-            try await uniffiRustCallAsync(
-                rustFutureFunc: {
-                    uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_send_files(
-                        self.uniffiClonePointer(),
-                        FfiConverterTypeDevice.lower(receiver), FfiConverterSequenceString.lower(filePaths), FfiConverterOptionCallbackInterfaceSendProgressDelegate.lower(progressDelegate)
-                    )
-                },
-                pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_void,
-                completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_void,
-                freeFunc: ffi_intershare_sdk_ffi_rust_future_free_void,
-                liftFunc: { $0 },
-                errorHandler: FfiConverterTypeConnectErrors.lift
-            )
-    }
-
     open func setBleConnectionDetails(bleDetails: BluetoothLeConnectionInfo) { try! rustCall {
         uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_set_ble_connection_details(self.uniffiClonePointer(),
                                                                                             FfiConverterTypeBluetoothLeConnectionInfo.lower(bleDetails), $0)
@@ -1017,6 +1050,23 @@ open class InternalNearbyServer:
         uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_set_tcp_details(self.uniffiClonePointer(),
                                                                                  FfiConverterTypeTcpConnectionInfo.lower(tcpDetails), $0)
     }
+    }
+
+    open func shareFiles(filePaths: [String], allowConvenienceShare: Bool, progressDelegate: ShareProgressDelegate?) async -> ShareStore {
+        return
+            try! await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_share_files(
+                        self.uniffiClonePointer(),
+                        FfiConverterSequenceString.lower(filePaths), FfiConverterBool.lower(allowConvenienceShare), FfiConverterOptionCallbackInterfaceShareProgressDelegate.lower(progressDelegate)
+                    )
+                },
+                pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_pointer,
+                completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_pointer,
+                freeFunc: ffi_intershare_sdk_ffi_rust_future_free_pointer,
+                liftFunc: FfiConverterTypeShareStore.lift,
+                errorHandler: nil
+            )
     }
 
     open func start() async {
@@ -1035,9 +1085,20 @@ open class InternalNearbyServer:
             )
     }
 
-    open func stop() { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_stop(self.uniffiClonePointer(), $0)
-    }
+    open func stop() async {
+        return
+            try! await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_stop(
+                        self.uniffiClonePointer()
+                    )
+                },
+                pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_void,
+                completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_void,
+                freeFunc: ffi_intershare_sdk_ffi_rust_future_free_void,
+                liftFunc: { $0 },
+                errorHandler: nil
+            )
     }
 }
 
@@ -1086,6 +1147,140 @@ public func FfiConverterTypeInternalNearbyServer_lift(_ pointer: UnsafeMutableRa
 #endif
 public func FfiConverterTypeInternalNearbyServer_lower(_ value: InternalNearbyServer) -> UnsafeMutableRawPointer {
     return FfiConverterTypeInternalNearbyServer.lower(value)
+}
+
+public protocol ShareStoreProtocol: AnyObject {
+    func generateLink() -> String?
+
+    func generateQrCode() -> [UInt8]?
+
+    func sendTo(receiver: Device, progressDelegate: SendProgressDelegate?) async throws
+}
+
+open class ShareStore:
+    ShareStoreProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_intershare_sdk_ffi_fn_clone_sharestore(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_intershare_sdk_ffi_fn_free_sharestore(pointer, $0) }
+    }
+
+    open func generateLink() -> String? {
+        return try! FfiConverterOptionString.lift(try! rustCall {
+            uniffi_intershare_sdk_ffi_fn_method_sharestore_generate_link(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func generateQrCode() -> [UInt8]? {
+        return try! FfiConverterOptionSequenceUInt8.lift(try! rustCall {
+            uniffi_intershare_sdk_ffi_fn_method_sharestore_generate_qr_code(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func sendTo(receiver: Device, progressDelegate: SendProgressDelegate?) async throws {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_intershare_sdk_ffi_fn_method_sharestore_send_to(
+                        self.uniffiClonePointer(),
+                        FfiConverterTypeDevice.lower(receiver), FfiConverterOptionCallbackInterfaceSendProgressDelegate.lower(progressDelegate)
+                    )
+                },
+                pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_void,
+                completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_void,
+                freeFunc: ffi_intershare_sdk_ffi_rust_future_free_void,
+                liftFunc: { $0 },
+                errorHandler: FfiConverterTypeConnectErrors.lift
+            )
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareStore: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = ShareStore
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> ShareStore {
+        return ShareStore(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: ShareStore) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareStore {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: ShareStore, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareStore_lift(_ pointer: UnsafeMutableRawPointer) throws -> ShareStore {
+    return try FfiConverterTypeShareStore.lift(pointer)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareStore_lower(_ value: ShareStore) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeShareStore.lower(value)
 }
 
 public struct BluetoothLeConnectionInfo {
@@ -1736,6 +1931,51 @@ public func FfiConverterTypeReceiveProgressState_lower(_ value: ReceiveProgressS
 
 extension ReceiveProgressState: Equatable, Hashable {}
 
+public enum RequestConvenienceShareErrors {
+    case NotAValidLink
+    case IncompatibleProtocolVersion
+    case FailedToConnect
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRequestConvenienceShareErrors: FfiConverterRustBuffer {
+    typealias SwiftType = RequestConvenienceShareErrors
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RequestConvenienceShareErrors {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .NotAValidLink
+        case 2: return .IncompatibleProtocolVersion
+        case 3: return .FailedToConnect
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RequestConvenienceShareErrors, into buf: inout [UInt8]) {
+        switch value {
+        case .NotAValidLink:
+            writeInt(&buf, Int32(1))
+
+        case .IncompatibleProtocolVersion:
+            writeInt(&buf, Int32(2))
+
+        case .FailedToConnect:
+            writeInt(&buf, Int32(3))
+        }
+    }
+}
+
+extension RequestConvenienceShareErrors: Equatable, Hashable {}
+
+extension RequestConvenienceShareErrors: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -1745,7 +1985,6 @@ public enum SendProgressState {
     case requesting
     case connectionMediumUpdate(medium: ConnectionMedium
     )
-    case compressing
     case transferring(progress: Double
     )
     case cancelled
@@ -1771,16 +2010,14 @@ public struct FfiConverterTypeSendProgressState: FfiConverterRustBuffer {
         case 4: return try .connectionMediumUpdate(medium: FfiConverterTypeConnectionMedium.read(from: &buf)
             )
 
-        case 5: return .compressing
-
-        case 6: return try .transferring(progress: FfiConverterDouble.read(from: &buf)
+        case 5: return try .transferring(progress: FfiConverterDouble.read(from: &buf)
             )
 
-        case 7: return .cancelled
+        case 6: return .cancelled
 
-        case 8: return .finished
+        case 7: return .finished
 
-        case 9: return .declined
+        case 8: return .declined
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -1801,21 +2038,18 @@ public struct FfiConverterTypeSendProgressState: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
             FfiConverterTypeConnectionMedium.write(medium, into: &buf)
 
-        case .compressing:
-            writeInt(&buf, Int32(5))
-
         case let .transferring(progress):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(5))
             FfiConverterDouble.write(progress, into: &buf)
 
         case .cancelled:
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(6))
 
         case .finished:
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(7))
 
         case .declined:
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(8))
         }
     }
 }
@@ -1835,6 +2069,67 @@ public func FfiConverterTypeSendProgressState_lower(_ value: SendProgressState) 
 }
 
 extension SendProgressState: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ShareProgressState {
+    case compressing(progress: Double
+    )
+    case finished
+    case error
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareProgressState: FfiConverterRustBuffer {
+    typealias SwiftType = ShareProgressState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareProgressState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .compressing(progress: FfiConverterDouble.read(from: &buf)
+            )
+
+        case 2: return .finished
+
+        case 3: return .error
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ShareProgressState, into buf: inout [UInt8]) {
+        switch value {
+        case let .compressing(progress):
+            writeInt(&buf, Int32(1))
+            FfiConverterDouble.write(progress, into: &buf)
+
+        case .finished:
+            writeInt(&buf, Int32(2))
+
+        case .error:
+            writeInt(&buf, Int32(3))
+        }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareProgressState_lift(_ buf: RustBuffer) throws -> ShareProgressState {
+    return try FfiConverterTypeShareProgressState.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareProgressState_lower(_ value: ShareProgressState) -> RustBuffer {
+    return FfiConverterTypeShareProgressState.lower(value)
+}
+
+extension ShareProgressState: Equatable, Hashable {}
 
 public enum TransmissionSetupError {
     case UnableToStartTcpServer(error: String
@@ -2745,6 +3040,96 @@ extension FfiConverterCallbackInterfaceSendProgressDelegate: FfiConverter {
     }
 }
 
+public protocol ShareProgressDelegate: AnyObject {
+    func progressChanged(progress: ShareProgressState)
+}
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+private enum UniffiCallbackInterfaceShareProgressDelegate {
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    static var vtable: UniffiVTableCallbackInterfaceShareProgressDelegate = .init(
+        progressChanged: { (
+            uniffiHandle: UInt64,
+            progress: RustBuffer,
+            _: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceShareProgressDelegate.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.progressChanged(
+                    progress: FfiConverterTypeShareProgressState.lift(progress)
+                )
+            }
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) in
+            let result = try? FfiConverterCallbackInterfaceShareProgressDelegate.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface ShareProgressDelegate: handle missing in uniffiFree")
+            }
+        }
+    )
+}
+
+private func uniffiCallbackInitShareProgressDelegate() {
+    uniffi_intershare_sdk_ffi_fn_init_callback_vtable_shareprogressdelegate(&UniffiCallbackInterfaceShareProgressDelegate.vtable)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+private enum FfiConverterCallbackInterfaceShareProgressDelegate {
+    fileprivate static var handleMap = UniffiHandleMap<ShareProgressDelegate>()
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceShareProgressDelegate: FfiConverter {
+    typealias SwiftType = ShareProgressDelegate
+    typealias FfiType = UInt64
+
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
@@ -2892,6 +3277,54 @@ private struct FfiConverterOptionCallbackInterfaceSendProgressDelegate: FfiConve
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
+private struct FfiConverterOptionCallbackInterfaceShareProgressDelegate: FfiConverterRustBuffer {
+    typealias SwiftType = ShareProgressDelegate?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterCallbackInterfaceShareProgressDelegate.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterCallbackInterfaceShareProgressDelegate.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+private struct FfiConverterOptionSequenceUInt8: FfiConverterRustBuffer {
+    typealias SwiftType = [UInt8]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceUInt8.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceUInt8.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
 private struct FfiConverterOptionSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]?
 
@@ -2910,6 +3343,31 @@ private struct FfiConverterOptionSequenceString: FfiConverterRustBuffer {
         case 1: return try FfiConverterSequenceString.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+private struct FfiConverterSequenceUInt8: FfiConverterRustBuffer {
+    typealias SwiftType = [UInt8]
+
+    public static func write(_ value: [UInt8], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterUInt8.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UInt8] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UInt8]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterUInt8.read(from: &buf))
+        }
+        return seq
     }
 }
 
@@ -3031,6 +3489,20 @@ public func getLogFilePathStr() -> String? {
     })
 }
 
+public func handleIncomingL2capConnection(connectionId: String, nativeStream: NativeStreamDelegate) async {
+    return
+        try! await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_intershare_sdk_ffi_fn_func_handle_incoming_l2cap_connection(FfiConverterString.lower(connectionId), FfiConverterCallbackInterfaceNativeStreamDelegate.lower(nativeStream))
+            },
+            pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_void,
+            completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_void,
+            freeFunc: ffi_intershare_sdk_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+        )
+}
+
 private enum InitializationResult {
     case ok
     case contractVersionMismatch
@@ -3054,6 +3526,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_ffi_checksum_func_get_log_file_path_str() != 27489 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_intershare_sdk_ffi_checksum_func_handle_incoming_l2cap_connection() != 31096 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_ffi_checksum_method_connectionrequest_accept() != 5403 {
@@ -3095,6 +3570,15 @@ private var initializationResult: InitializationResult = {
     if uniffi_intershare_sdk_ffi_checksum_method_internaldiscovery_stop() != 25027 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_intershare_sdk_ffi_checksum_method_sharestore_generate_link() != 52573 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_intershare_sdk_ffi_checksum_method_sharestore_generate_qr_code() != 60327 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_intershare_sdk_ffi_checksum_method_sharestore_send_to() != 57303 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_add_ble_implementation() != 45172 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3113,16 +3597,13 @@ private var initializationResult: InitializationResult = {
     if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_get_device_name() != 59652 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_handle_incoming_ble_connection() != 41644 {
-        return InitializationResult.apiChecksumMismatch
-    }
     if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_handle_incoming_connection() != 5301 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_restart_server() != 50803 {
+    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_request_download() != 7440 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_send_files() != 42633 {
+    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_restart_server() != 50803 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_set_ble_connection_details() != 31529 {
@@ -3131,10 +3612,13 @@ private var initializationResult: InitializationResult = {
     if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_set_tcp_details() != 19599 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_share_files() != 22062 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_start() != 43187 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_stop() != 56398 {
+    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_stop() != 14889 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_ffi_checksum_constructor_internaldiscovery_new() != 58519 {
@@ -3185,6 +3669,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_intershare_sdk_ffi_checksum_method_sendprogressdelegate_progress_changed() != 50088 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_intershare_sdk_ffi_checksum_method_shareprogressdelegate_progress_changed() != 47709 {
+        return InitializationResult.apiChecksumMismatch
+    }
 
     uniffiCallbackInitBleDiscoveryImplementationDelegate()
     uniffiCallbackInitBleServerImplementationDelegate()
@@ -3194,6 +3681,7 @@ private var initializationResult: InitializationResult = {
     uniffiCallbackInitNearbyConnectionDelegate()
     uniffiCallbackInitReceiveProgressDelegate()
     uniffiCallbackInitSendProgressDelegate()
+    uniffiCallbackInitShareProgressDelegate()
     return InitializationResult.ok
 }()
 

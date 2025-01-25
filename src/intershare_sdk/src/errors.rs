@@ -45,6 +45,18 @@ pub enum ConnectErrors {
 }
 
 #[derive(Error, Debug)]
+pub enum RequestConvenienceShareErrors {
+    #[error("Not a valid link")]
+    NotAValidLink,
+
+    #[error("Incompatible protocol version")]
+    IncompatibleProtocolVersion,
+
+    #[error("Failed to connect")]
+    FailedToConnect
+}
+
+#[derive(Error, Debug)]
 pub enum IncomingErrors {
     #[error("Unknown reading error: {0}")]
     UnknownReadError(io::Error),

@@ -2,6 +2,9 @@ namespace InterShareSDK {
     string get_ble_service_uuid();
     string get_ble_discovery_characteristic_uuid();
     string? get_log_file_path_str();
+
+    [Async]
+    void handle_incoming_l2cap_connection(string connection_id, NativeStreamDelegate native_stream);
 };
 
 dictionary Device {
@@ -30,6 +33,13 @@ interface ConnectErrors {
     FailedToGetBleDetails();
     InternalBleHandlerNotAvailable();
     FailedToEstablishBleConnection();
+};
+
+[Error]
+interface RequestConvenienceShareErrors {
+    NotAValidLink();
+    IncompatibleProtocolVersion();
+    FailedToConnect();
 };
 
 [Error]
@@ -121,6 +131,14 @@ interface InternalDiscovery {
     void parse_discovery_message(bytes data, string? ble_uuid);
 };
 
+interface ShareStore {
+    [Throws=ConnectErrors, Async]
+    void send_to(Device receiver, SendProgressDelegate? progress_delegate);
+
+    string? generate_link();
+    sequence<u8>? generate_qr_code();
+};
+
 callback interface NativeStreamDelegate {
     u64 write(bytes data);
     bytes read(u64 buffer_length);
@@ -139,11 +157,21 @@ interface SendProgressState {
     Connecting();
     Requesting();
     ConnectionMediumUpdate(ConnectionMedium medium);
-    Compressing();
     Transferring(double progress);
     Cancelled();
     Finished();
     Declined();
+};
+
+[Enum]
+interface ShareProgressState {
+    Compressing(double progress);
+    Finished();
+    Error();
+};
+
+callback interface ShareProgressDelegate {
+    void progress_changed(ShareProgressState progress);
 };
 
 callback interface SendProgressDelegate {

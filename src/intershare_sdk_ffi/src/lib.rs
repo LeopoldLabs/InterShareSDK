@@ -7,13 +7,14 @@ pub use intershare_sdk::Device;
 pub use intershare_sdk::discovery::{BleDiscoveryImplementationDelegate, Discovery};
 pub use intershare_sdk::DiscoveryDelegate as DeviceListUpdateDelegate;
 pub use intershare_sdk::encryption::EncryptedStream;
-pub use intershare_sdk::nearby_server::{ConnectionMedium, SendProgressState, SendProgressDelegate, BleServerImplementationDelegate, L2CapDelegate, NearbyConnectionDelegate, NearbyServer};
-pub use intershare_sdk::nearby_server::ConnectionIntentType;
+pub use intershare_sdk::nearby_server::{ShareProgressState, ShareProgressDelegate, BleServerImplementationDelegate, ConnectionIntentType, L2CapDelegate, NearbyConnectionDelegate, NearbyServer};
 pub use intershare_sdk::protocol::communication::FileTransferIntent;
 pub use intershare_sdk::stream::NativeStreamDelegate;
 pub use intershare_sdk::transmission::TransmissionSetupError;
 pub use intershare_sdk::errors::*;
+pub use intershare_sdk::connection::handle_incoming_l2cap_connection;
 pub use intershare_sdk::*;
+pub use intershare_sdk::share_store::{ConnectionMedium, SendProgressState, SendProgressDelegate, ShareStore};
 pub use intershare_sdk::get_log_file_path_str;
 use intershare_sdk::protocol::discovery::{BluetoothLeConnectionInfo, TcpConnectionInfo};
 
@@ -37,10 +38,6 @@ pub fn get_ble_service_uuid() -> String {
 
 pub fn get_ble_discovery_characteristic_uuid() -> String {
     return BLE_DISCOVERY_CHARACTERISTIC_UUID.to_string();
-}
-
-pub fn get_ble_write_characteristic_uuid() -> String {
-    return BLE_WRITE_CHARACTERISTIC_UUID.to_string();
 }
 
 pub struct InternalDiscovery {

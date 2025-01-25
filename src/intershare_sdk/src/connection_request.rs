@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::sync::atomic::{AtomicBool, Ordering};
 use log::{error, warn};
 use prost_stream::Stream;
-use protocol::communication::transfer_request::Intent;
-use protocol::communication::{ClipboardTransferIntent, FileTransferIntent, TransferRequest, TransferRequestResponse};
+use protocol::communication::request::Intent;
+use protocol::communication::{ClipboardTransferIntent, FileTransferIntent, Request, TransferRequestResponse};
 use protocol::discovery::Device;
 use tempfile::NamedTempFile;
 use tokio::sync::RwLock;
@@ -31,7 +31,7 @@ struct SharedVariables {
 }
 
 pub struct ConnectionRequest {
-    transfer_request: TransferRequest,
+    transfer_request: Request,
     connection: Arc<Mutex<Box<dyn EncryptedReadWrite>>>,
     file_storage: String,
     should_cancel: AtomicBool,
@@ -40,7 +40,7 @@ pub struct ConnectionRequest {
 }
 
 impl ConnectionRequest {
-    pub fn new(transfer_request: TransferRequest, connection: Box<dyn EncryptedReadWrite>, file_storage: String, tmp_dir: Option<String>) -> Self {
+    pub fn new(transfer_request: Request, connection: Box<dyn EncryptedReadWrite>, file_storage: String, tmp_dir: Option<String>) -> Self {
         Self {
             tmp_dir,
             transfer_request,

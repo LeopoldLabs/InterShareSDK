@@ -32,11 +32,13 @@ pub mod transmission;
 pub mod communication;
 pub mod connection_request;
 pub mod errors;
+pub mod share_store;
+pub mod connection;
 mod zip;
 
+pub const PROTOCOL_VERSION: u32 = 0;
 pub const BLE_SERVICE_UUID: &str = "68D60EB2-8AAA-4D72-8851-BD6D64E169B7";
 pub const BLE_DISCOVERY_CHARACTERISTIC_UUID: &str = "0BEBF3FE-9A5E-4ED1-8157-76281B3F0DA5";
-pub const BLE_WRITE_CHARACTERISTIC_UUID: &str = "8B1C476F-1197-4A0D-A484-378AABE85317";
 pub const BLE_BUFFER_SIZE: usize = 1024;
 
 static INIT_LOGGER: Once = Once::new();

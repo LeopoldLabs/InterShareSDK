@@ -27,3 +27,7 @@ tempfile = "3"
 zip = { version = "2.2.2", default-features = false, features = ["aes-crypto", "deflate", "deflate64", "lzma", "time", "zstd"]}
 simplelog = "0.12.2"
 directories = "5.0"
+walkdir = "2.5"
+url = "2.5.4"
+base64 = "0.22.1"
+fast_qr = { version = "0.12.7", features = ["image"]}

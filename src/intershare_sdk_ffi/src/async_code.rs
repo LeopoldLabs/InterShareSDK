@@ -1,9 +1,11 @@
-pub use intershare_sdk::{nearby_server::{BleServerImplementationDelegate, L2CapDelegate, NearbyConnectionDelegate, NearbyServer, SendProgressDelegate}, Device};
+use std::sync::Arc;
+
+pub use intershare_sdk::{nearby_server::{BleServerImplementationDelegate, L2CapDelegate, NearbyConnectionDelegate, NearbyServer}, Device};
 pub use intershare_sdk::protocol::discovery::{BluetoothLeConnectionInfo, DeviceDiscoveryMessage, TcpConnectionInfo};
-use intershare_sdk::protocol::discovery::device_discovery_message::Content;
+use intershare_sdk::{nearby_server::ShareProgressDelegate, protocol::discovery::device_discovery_message::Content, share_store::ShareStore};
 use intershare_sdk::protocol::prost::Message;
 pub use intershare_sdk::stream::NativeStreamDelegate;
-pub use intershare_sdk::errors::*;
+pub use intershare_sdk::errors::RequestConvenienceShareErrors;
 
 #[derive(uniffi::Object)]
 pub struct InternalNearbyServer {
@@ -47,7 +49,7 @@ impl InternalNearbyServer {
 
     pub async fn get_advertisement_data(&self) -> Vec<u8> {
 
-        if self.handler.variables.read().await.advertise {
+        if *self.handler.advertise.read().await {
             return DeviceDiscoveryMessage {
                 content: Some(
                     Content::DeviceConnectionInfo(
@@ -81,16 +83,12 @@ impl InternalNearbyServer {
         self.handler.restart_server().await;
     }
 
-    pub fn handle_incoming_ble_connection(&self, connection_id: String, native_stream: Box<dyn NativeStreamDelegate>) {
-        return self.handler.handle_incoming_ble_connection(connection_id, native_stream);
+    pub async fn share_files(&self, file_paths: Vec<String>, allow_convenience_share: bool, progress_delegate: Option<Box<dyn ShareProgressDelegate>>) -> Arc<ShareStore> {
+        return self.handler.share_files(file_paths, allow_convenience_share, progress_delegate).await
     }
 
-    pub async fn send_files(&self, receiver: Device, file_paths: Vec<String>, progress_delegate: Option<Box<dyn SendProgressDelegate>>) -> Result<(), ConnectErrors> {
-        return self.handler.send_files(receiver, file_paths, progress_delegate).await;
-    }
-
-    pub fn stop(&self) {
-        self.handler.stop();
+    pub async fn stop(&self) {
+        self.handler.stop().await;
     }
 
     pub fn handle_incoming_connection(&self, native_stream_handle: Box<dyn NativeStreamDelegate>) {
@@ -99,5 +97,9 @@ impl InternalNearbyServer {
 
     pub fn get_device_name(&self) -> Option<String> {
         return self.handler.get_device_name()
+    }
+
+    pub async fn request_download(&self, link: String) -> Result<(), RequestConvenienceShareErrors> {
+        return self.handler.request_download(link).await;
     }
 }
