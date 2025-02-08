@@ -7,11 +7,10 @@ use prost_stream::Stream;
 use protocol::communication::request::Intent;
 use protocol::communication::{ClipboardTransferIntent, FileTransferIntent, Request, TransferRequestResponse};
 use protocol::discovery::Device;
-use tempfile::NamedTempFile;
 use tokio::sync::RwLock;
 use crate::{encryption::EncryptedReadWrite, nearby_server::ConnectionIntentType};
 use crate::zip::unzip_file;
-use crate::BLE_BUFFER_SIZE;
+use crate::{create_tmp_file, BLE_BUFFER_SIZE};
 
 pub enum ReceiveProgressState {
     Unknown,
@@ -35,14 +34,12 @@ pub struct ConnectionRequest {
     connection: Arc<Mutex<Box<dyn EncryptedReadWrite>>>,
     file_storage: String,
     should_cancel: AtomicBool,
-    variables: Arc<RwLock<SharedVariables>>,
-    tmp_dir: Option<String>
+    variables: Arc<RwLock<SharedVariables>>
 }
 
 impl ConnectionRequest {
-    pub fn new(transfer_request: Request, connection: Box<dyn EncryptedReadWrite>, file_storage: String, tmp_dir: Option<String>) -> Self {
+    pub fn new(transfer_request: Request, connection: Box<dyn EncryptedReadWrite>, file_storage: String) -> Self {
         Self {
-            tmp_dir,
             transfer_request,
             connection: Arc::new(Mutex::new(connection)),
             file_storage,
@@ -124,19 +121,11 @@ impl ConnectionRequest {
     }
 
     fn handle_clipboard(&self, _clipboard_transfer_intent: ClipboardTransferIntent) -> Option<Vec<String>> {
-        panic!("Not implemented yet");
-    }
-
-    fn create_tmp_file(&self) -> NamedTempFile {
-        #[cfg(not(target_os="android"))]
-        return NamedTempFile::new().expect("Failed to create temporary ZIP file.");
-
-        #[cfg(target_os="android")]
-        return NamedTempFile::new_in(self.tmp_dir.clone().expect("tmp dir is not set on android")).expect("Failed to create temporary ZIP file.");
+        return None;
     }
 
     fn handle_file(&self, mut stream: MutexGuard<Box<dyn EncryptedReadWrite>>, file_transfer: FileTransferIntent) -> Option<Vec<String>> {
-        let named_file = self.create_tmp_file();
+        let named_file = create_tmp_file();
         let mut zip_file = named_file.reopen().expect("Failed to reopen temporary ZIP file");
 
         let mut buffer = [0; BLE_BUFFER_SIZE];

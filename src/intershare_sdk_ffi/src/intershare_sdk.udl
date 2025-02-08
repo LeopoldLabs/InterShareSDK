@@ -3,6 +3,8 @@ namespace InterShareSDK {
     string get_ble_discovery_characteristic_uuid();
     string? get_log_file_path_str();
 
+    VersionCompatibility is_compatible(Device device);
+
     [Async]
     void handle_incoming_l2cap_connection(string connection_id, NativeStreamDelegate native_stream);
 };
@@ -11,6 +13,7 @@ dictionary Device {
     string id;
     string name;
     i32 device_type;
+    u32? protocol_version = null;
 };
 
 [Error]
@@ -20,13 +23,15 @@ interface TransmissionSetupError {
 
 [Error]
 interface ConnectErrors {
+    InvalidProtocolVersion();
     Unreachable();
+    NoTextProvided();
     NoFilesProvided();
     FailedToGetConnectionDetails();
     Declined();
     FailedToGetTcpDetails();
     FailedToGetSocketAddress();
-    FailedToOpenTcpStream();
+    FailedToOpenTcpStream(string error);
     FailedToEncryptStream(string error);
     FailedToDetermineFileSize(string error);
     FailedToGetTransferRequestResponse(string error);
@@ -39,7 +44,7 @@ interface ConnectErrors {
 interface RequestConvenienceShareErrors {
     NotAValidLink();
     IncompatibleProtocolVersion();
-    FailedToConnect();
+    FailedToConnect(string error);
 };
 
 [Error]
@@ -81,6 +86,12 @@ dictionary ClipboardTransferIntent {
 enum ConnectionIntentType {
     "FileTransfer",
     "Clipboard"
+};
+
+enum VersionCompatibility {
+    "Compatible",
+    "OutdatedVersion",
+    "IncompatibleNewVersion"
 };
 
 [Enum]
@@ -136,7 +147,7 @@ interface ShareStore {
     void send_to(Device receiver, SendProgressDelegate? progress_delegate);
 
     string? generate_link();
-    sequence<u8>? generate_qr_code();
+    sequence<u8>? generate_qr_code(boolean dark_mode);
 };
 
 callback interface NativeStreamDelegate {
@@ -165,6 +176,7 @@ interface SendProgressState {
 
 [Enum]
 interface ShareProgressState {
+    Unknown();
     Compressing(double progress);
     Finished();
     Error();

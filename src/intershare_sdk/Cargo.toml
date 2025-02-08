@@ -5,29 +5,22 @@ edition = "2021"
 
 [dependencies]
 protocol = { path = "../protocol" }
-crossbeam-channel = "0.5"
-mdns-sd = "0.10.1"
-x25519-dalek = "2.0.1"
-chacha20 = "0.9.0"
-chacha20poly1305 = { version = "^0.10", features = ["stream"] }
-uuid = { version = "1.2.0", features = ["v4", "fast-rng"]}
-rand_core = "0.6"
-downcast-rs = "1.2.0"
-anyhow = "1.0"
-thiserror = "1.0"
-bytes = "1.5.0"
-futures = "0.3"
-tokio = {  version = "1.35.1", features = ["net", "io-util", "time", "sync"] }
-async-prost = "0.4.0"
+x25519-dalek = { version = "2.0.1", default-features = false }
+chacha20 = { version = "0.9.0" }
+chacha20poly1305 = { version = "^0.10", default-features = false, features = ["stream", "rand_core"] }
+uuid = { version = "1.2.0", default-features = false, features = ["v4", "fast-rng"]}
+rand_core = { version = "0.6", default-features = false }
+thiserror = { version = "2.0.11", default-features = false }
+tokio = {  version = "1.35.1", default-features = false, features = ["net", "io-util", "time", "sync", "rt"] }
 local-ip-address = { git = "https://github.com/julian-baumann/local-ip-address.git", rev = "4fa3e37" }
-prost-stream = "0.1.2"
-android_logger = "0.13.3"
-log = "0.4.20"
-tempfile = "3"
-zip = { version = "2.2.2", default-features = false, features = ["aes-crypto", "deflate", "deflate64", "lzma", "time", "zstd"]}
-simplelog = "0.12.2"
-directories = "5.0"
-walkdir = "2.5"
-url = "2.5.4"
-base64 = "0.22.1"
-fast_qr = { version = "0.12.7", features = ["image"]}
+prost-stream = { git = "https://github.com/InterShare/prost-stream.git", rev = "8a35d31", default-features = false }
+android_logger = { version = "0.13.3", default-features = false }
+log = { version = "0.4.20", default-features = false }
+tempfile = { version = "3", default-features = false }
+zip = { version = "2.2.2", default-features = false, features = ["deflate", "deflate64", "lzma", "time", "zstd"]}
+simplelog = { version = "0.12.2", default-features = false }
+directories = { version = "5.0", default-features = false }
+walkdir = { version = "2.5", default-features = false }
+url = { version = "2.5.4", default-features = false }
+base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+fast_qr = { version = "0.12.7", default-features = false, features = ["image"]}

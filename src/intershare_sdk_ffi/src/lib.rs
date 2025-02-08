@@ -1,7 +1,6 @@
-use std::io;
 use std::sync::Arc;
 
-pub use intershare_sdk::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID, ClipboardTransferIntent};
+pub use intershare_sdk::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID, ClipboardTransferIntent, VersionCompatibility, is_compatible};
 pub use intershare_sdk::connection_request::{ConnectionRequest, ReceiveProgressState, ReceiveProgressDelegate};
 pub use intershare_sdk::Device;
 pub use intershare_sdk::discovery::{BleDiscoveryImplementationDelegate, Discovery};
@@ -20,16 +19,23 @@ use intershare_sdk::protocol::discovery::{BluetoothLeConnectionInfo, TcpConnecti
 
 pub mod async_code;
 
-#[derive(Debug, thiserror::Error)]
-pub enum ExternalIOError {
-    #[error("IO Error: {reason}")]
-    IOError { reason: String }
-}
+// #[derive(Debug, thiserror::Error)]
+// pub enum ExternalIOError {
+//     #[error("IO Error: {reason}")]
+//     IOError { reason: String }
+// }
+//
+// impl From<io::Error> for ExternalIOError {
+//     fn from(error: io::Error) -> Self {
+//         return ExternalIOError::IOError { reason: error.to_string() }
+//     }
+// }
+//
 
-impl From<io::Error> for ExternalIOError {
-    fn from(error: io::Error) -> Self {
-        return ExternalIOError::IOError { reason: error.to_string() }
-    }
+#[cfg(target_os = "android")]
+#[uniffi::export]
+pub fn set_tmp_dir(tmp: String) {
+    intershare_sdk::set_tmp_dir(tmp)
 }
 
 pub fn get_ble_service_uuid() -> String {

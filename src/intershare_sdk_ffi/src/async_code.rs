@@ -15,8 +15,8 @@ pub struct InternalNearbyServer {
 #[uniffi::export(async_runtime = "tokio")]
 impl InternalNearbyServer {
     #[uniffi::constructor]
-    pub fn new(my_device: Device, file_storage: String, delegate: Option<Box<dyn NearbyConnectionDelegate>>, tmp_dir: Option<String>) -> Self {
-        let server = NearbyServer::new(my_device, file_storage, delegate, tmp_dir);
+    pub fn new(my_device: Device, file_storage: String, delegate: Option<Box<dyn NearbyConnectionDelegate>>) -> Self {
+        let server = NearbyServer::new(my_device, file_storage, delegate);
 
         Self {
             handler: server
@@ -85,6 +85,10 @@ impl InternalNearbyServer {
 
     pub async fn share_files(&self, file_paths: Vec<String>, allow_convenience_share: bool, progress_delegate: Option<Box<dyn ShareProgressDelegate>>) -> Arc<ShareStore> {
         return self.handler.share_files(file_paths, allow_convenience_share, progress_delegate).await
+    }
+
+    pub async fn share_text(&self, text: String, allow_convenience_share: bool) -> Arc<ShareStore> {
+        return self.handler.share_text(text, allow_convenience_share).await
     }
 
     pub async fn stop(&self) {

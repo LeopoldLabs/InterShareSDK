@@ -7,7 +7,6 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Environment
-import android.provider.MediaStore.Downloads
 import android.util.Log
 import com.julian_baumann.intershare_sdk.bluetoothLowEnergy.BLEPeripheralManager
 import com.julian_baumann.intershare_sdk.bluetoothLowEnergy.L2CAPClientManager
@@ -23,8 +22,7 @@ class NearbyServer(context: Context, myDevice: Device, delegate: NearbyConnectio
     private val internal: InternalNearbyServer = InternalNearbyServer(
         myDevice,
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath,
-        delegate,
-        context.cacheDir.absolutePath
+        delegate
     )
 
     private val internalBleImplementation = BLEPeripheralManager(context, internal, bluetoothManager)
@@ -93,6 +91,8 @@ class NearbyServer(context: Context, myDevice: Device, delegate: NearbyConnectio
     }
 
     init {
+        setTmpDir(context.cacheDir.absolutePath)
+        
         internal.addBleImplementation(internalBleImplementation)
         internal.addL2CapClient(internalL2CapClient)
 
@@ -111,6 +111,10 @@ class NearbyServer(context: Context, myDevice: Device, delegate: NearbyConnectio
 
     suspend fun shareFiles(urls: List<String>, allowConvenienceDownload: Boolean, progressDelegate: ShareProgressDelegate?): ShareStore {
         return internal.shareFiles(urls, allowConvenienceDownload, progressDelegate)
+    }
+
+    suspend fun shareText(text: String, allowConvenienceDownload: Boolean): ShareStore {
+        return internal.shareText(text, allowConvenienceDownload)
     }
 
     suspend fun requestDownload(link: String) {

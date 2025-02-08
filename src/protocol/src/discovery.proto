@@ -24,6 +24,7 @@ message Device {
     string id = 1;
     string name = 2;
     DeviceType device_type = 3;
+    optional uint32 protocol_version = 4;
 
     enum DeviceType {
         UNKNOWN = 0;

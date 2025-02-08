@@ -1,14 +1,14 @@
 use std::ffi::OsStr;
-use std::{fs, panic};
-use std::fs::File;
+use std::panic;
 use std::path::PathBuf;
-use std::sync::Once;
 
 // Only Android
 #[cfg(target_os="android")]
 use android_logger::Config;
 #[cfg(target_os="android")]
 use log::LevelFilter;
+#[cfg(target_os = "android")]
+use std::sync::RwLock;
 
 // If not Android
 #[cfg(not(target_os="android"))]
@@ -16,13 +16,21 @@ use simplelog::{Config, WriteLogger};
 #[cfg(not(target_os="android"))]
 use log::{error, info, LevelFilter};
 #[cfg(not(target_os="android"))]
-use directories::{BaseDirs};
+use directories::BaseDirs;
+#[cfg(not(target_os="android"))]
+use std::fs;
+#[cfg(not(target_os="android"))]
+use std::fs::File;
+#[cfg(not(target_os="android"))]
+use std::sync::Once;
 
 
 pub use protocol;
 pub use protocol::communication::ClipboardTransferIntent;
 pub use protocol::discovery::Device;
 pub use protocol::DiscoveryDelegate;
+use tempfile::NamedTempFile;
+pub use thiserror::Error;
 
 pub mod discovery;
 pub mod encryption;
@@ -41,7 +49,30 @@ pub const BLE_SERVICE_UUID: &str = "68D60EB2-8AAA-4D72-8851-BD6D64E169B7";
 pub const BLE_DISCOVERY_CHARACTERISTIC_UUID: &str = "0BEBF3FE-9A5E-4ED1-8157-76281B3F0DA5";
 pub const BLE_BUFFER_SIZE: usize = 1024;
 
+#[cfg(not(target_os="android"))]
 static INIT_LOGGER: Once = Once::new();
+
+pub enum VersionCompatibility {
+    Compatible,
+    OutdatedVersion,
+    IncompatibleNewVersion
+}
+
+pub fn is_compatible(device: Device) -> VersionCompatibility {
+    let Some(remote_device_version) = device.protocol_version else {
+        return VersionCompatibility::OutdatedVersion;
+    };
+
+    if remote_device_version < PROTOCOL_VERSION {
+        return VersionCompatibility::OutdatedVersion;
+    }
+
+    if remote_device_version > PROTOCOL_VERSION {
+        return VersionCompatibility::IncompatibleNewVersion;
+    }
+
+    return VersionCompatibility::Compatible;
+}
 
 fn convert_os_str(os_str: &OsStr) -> String {
     return os_str.to_string_lossy().to_string();
@@ -120,4 +151,33 @@ pub fn get_log_file_path_str() -> Option<String> {
     }
 
     return None;
+}
+
+#[cfg(target_os = "android")]
+static TMP_DIR: RwLock<Option<String>> = RwLock::new(None);
+
+#[cfg(target_os = "android")]
+pub fn set_tmp_dir(tmp: String) {
+    let mut tmp_dir = TMP_DIR.write().unwrap();
+    *tmp_dir = Some(tmp);
+}
+
+fn create_tmp_file() -> NamedTempFile {
+    #[cfg(target_os = "android")]
+    {
+        let tmp_dir = TMP_DIR.read().unwrap_or_else(|_| {
+            panic!("Failed to acquire read lock on TMP_DIR.");
+        });
+
+        let dir = tmp_dir.clone().expect("TMP_DIR is not set on Android.");
+
+        NamedTempFile::new_in(dir)
+            .expect("Failed to create temporary file in the specified TMP_DIR.")
+    }
+
+    #[cfg(not(target_os="android"))]
+    {
+        NamedTempFile::new()
+            .expect("Failed to create temporary file.")
+    }
 }

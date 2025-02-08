@@ -3,10 +3,10 @@ use fast_qr::convert::{image::ImageBuilder, Builder, Shape};
 use fast_qr::qr::QRBuilder;
 use log::{error, info};
 use prost_stream::Stream;
-use protocol::{communication::{request::{Intent, RequestTypes}, FileTransferIntent, Request, TransferRequestResponse}, discovery::{Device, DeviceConnectionInfo}};
+use protocol::{communication::{request::{Intent, RequestTypes}, FileTransferIntent, ClipboardTransferIntent, Request, TransferRequestResponse}, discovery::{Device, DeviceConnectionInfo}};
 use tempfile::NamedTempFile;
 use tokio::sync::RwLock;
-use crate::{connection::Connection, convert_os_str, encryption::generate_secure_base64_token, errors::ConnectErrors, PROTOCOL_VERSION};
+use crate::{connection::Connection, convert_os_str, encryption::generate_secure_base64_token, errors::ConnectErrors};
 use crate::nearby_server::L2CapDelegate;
 
 pub enum ConnectionMedium {
@@ -50,7 +50,7 @@ impl ShareStore {
             ble_l2_cap_client: Arc<RwLock<Option<Box<dyn L2CapDelegate>>>>,
             device_connection_info: DeviceConnectionInfo) -> Self {
         Self {
-            request_id: generate_secure_base64_token(42),
+            request_id: generate_secure_base64_token(23),
             file_paths,
             clipboard,
             allow_convenience_share,
@@ -68,6 +68,50 @@ impl ShareStore {
     }
 
     pub async fn send_to(&self, receiver: Device, progress_delegate: Option<Box<dyn SendProgressDelegate>>) -> Result<(), ConnectErrors> {
+        if self.file_paths.is_none() {
+            return self.send_text(receiver, progress_delegate).await
+        } else {
+            return self.send_files(receiver, progress_delegate).await
+        }
+    }
+
+    async fn send_text(&self, receiver: Device, progress_delegate: Option<Box<dyn SendProgressDelegate>>) -> Result<(), ConnectErrors> {
+        let Some(text) = &self.clipboard else {
+            return Err(ConnectErrors::NoTextProvided);
+        };
+
+        ShareStore::update_progress(&progress_delegate, SendProgressState::Connecting);
+
+        let connection = Connection::new(self.ble_l2_cap_client.clone());
+
+        let mut encrypted_stream = match connection.connect(receiver, &progress_delegate).await {
+            Ok(connection) => connection,
+            Err(error) => {
+                ShareStore::update_progress(&progress_delegate, SendProgressState::Unknown);
+                return Err(error)
+            }
+        };
+
+        let mut proto_stream = Stream::new(&mut encrypted_stream);
+
+        ShareStore::update_progress(&progress_delegate, SendProgressState::Transferring { progress: 0.0 });
+
+        let transfer_request = Request {
+            r#type: RequestTypes::ShareRequest as i32,
+            device: self.device_connection_info.device.clone(),
+            share_id: None,
+            intent: Some(Intent::Clipboard(ClipboardTransferIntent {
+                clipboard_content: text.to_string()
+            }))
+        };
+
+        let _ = proto_stream.send(&transfer_request);
+        ShareStore::update_progress(&progress_delegate, SendProgressState::Transferring { progress: 1.0 });
+
+        return Ok(());
+    }
+
+    async fn send_files(&self, receiver: Device, progress_delegate: Option<Box<dyn SendProgressDelegate>>) -> Result<(), ConnectErrors> {
         let Some(file_paths) = &self.file_paths else {
             return Err(ConnectErrors::NoFilesProvided);
         };
@@ -189,18 +233,17 @@ impl ShareStore {
         let ip = tcp_connection_info.hostname;
         let port = tcp_connection_info.port;
 
-        let link = format!("https://share.intershare.app?id={0}&ip={1}&port={2}&device_id={3}&protocol_version={4}",
+        let link = format!("https://s.intershare.app?i={0}&ip={1}&p={2}&d={3}",
             self.request_id,
             ip,
             port,
-            device.id,
-            PROTOCOL_VERSION,
+            device.id
         );
 
         return Some(link);
     }
 
-    pub fn generate_qr_code(&self) -> Option<Vec<u8>> {
+    pub fn generate_qr_code(&self, dark_mode: bool) -> Option<Vec<u8>> {
         let link = self.generate_link()?;
 
         let qrcode = QRBuilder::new(link)
@@ -208,9 +251,10 @@ impl ShareStore {
             .unwrap();
 
         let img = ImageBuilder::default()
-            .shape(Shape::RoundedSquare)
-            .background_color([255, 255, 255, 255])
-            .fit_width(600)
+            .shape(Shape::Circle)
+            .module_color(if dark_mode { [255, 255, 255, 255] } else { [0, 0, 0, 255] })
+            .background_color([0, 0, 0, 0])
+            .fit_width(300)
             .to_bytes(&qrcode);
 
         match img {

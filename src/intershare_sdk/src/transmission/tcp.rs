@@ -20,12 +20,11 @@ pub struct TcpServer {
     listener: Option<TcpListener>,
     delegate: Arc<RwLock<Box<dyn NearbyConnectionDelegate>>>,
     file_storage: String,
-    tmp_dir: Option<String>,
     running: Arc<AtomicBool>
 }
 
 impl NearbyServer {
-    pub(crate) async fn new_tcp_server(&self, delegate: Arc<RwLock<Box<dyn NearbyConnectionDelegate>>>, file_storage: String, tmp_dir: Option<String>) -> Result<TcpServer, io::Error> {
+    pub(crate) async fn new_tcp_server(&self, delegate: Arc<RwLock<Box<dyn NearbyConnectionDelegate>>>, file_storage: String) -> Result<TcpServer, io::Error> {
         let addresses = [
             SocketAddr::from(([0, 0, 0, 0], 80)),
             SocketAddr::from(([0, 0, 0, 0], 8080)),
@@ -41,7 +40,6 @@ impl NearbyServer {
             listener: Some(listener),
             delegate,
             file_storage,
-            tmp_dir,
             running: Arc::new(AtomicBool::new(true))
         });
     }
@@ -54,7 +52,6 @@ impl NearbyServer {
         let listener = tcp_server.listener.as_ref().expect("Listener is not initialized").try_clone().expect("Failed to clone listener");
         let delegate = tcp_server.delegate.clone();
         let file_storage = tcp_server.file_storage.clone();
-        let tmp_dir = tcp_server.tmp_dir.clone();
         let running = tcp_server.running.clone();
         let current_share_store = self.current_share_store.clone();
 
@@ -85,8 +82,7 @@ impl NearbyServer {
                     let connection_request = ConnectionRequest::new(
                         transfer_request,
                         Box::new(encrypted_stream),
-                        file_storage.clone(),
-                        tmp_dir.clone()
+                        file_storage.clone()
                     );
 
                     delegate.blocking_read().received_connection_request(Arc::new(connection_request));

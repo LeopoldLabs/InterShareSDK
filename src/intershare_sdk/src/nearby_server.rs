@@ -8,7 +8,6 @@ use prost_stream::Stream;
 use protocol::communication::request::RequestTypes;
 use protocol::communication::Request;
 use protocol::discovery::{BluetoothLeConnectionInfo, Device, DeviceConnectionInfo, TcpConnectionInfo};
-use tempfile::NamedTempFile;
 use tokio::sync::RwLock;
 use url::Url;
 
@@ -17,7 +16,7 @@ use crate::connection::Connection;
 use crate::connection_request::ConnectionRequest;
 use crate::errors::RequestConvenienceShareErrors;
 use crate::share_store::ShareStore;
-use crate::init_logger;
+use crate::{create_tmp_file, init_logger, PROTOCOL_VERSION};
 use crate::stream::Close;
 use crate::transmission::tcp::TcpServer;
 use crate::zip::zip_files;
@@ -37,6 +36,7 @@ pub enum ConnectionIntentType {
 }
 
 pub enum ShareProgressState {
+    Unknown,
     Compressing { progress: f64 },
     Finished,
     Error
@@ -67,18 +67,20 @@ pub struct NearbyServer {
     pub advertise: RwLock<bool>,
     file_storage: String,
     pub device_connection_info: RwLock<DeviceConnectionInfo>,
-    tmp_dir: Option<String>,
     nearby_connection_delegate: Option<Arc<RwLock<Box<dyn NearbyConnectionDelegate>>>>,
     pub(crate) current_share_store: Arc<RwLock<Option<Arc<ShareStore>>>>,
     requested_download_id: Arc<RwLock<Option<String>>>
 }
 
 impl NearbyServer {
-    pub fn new(my_device: Device, file_storage: String, delegate: Option<Box<dyn NearbyConnectionDelegate>>, tmp_dir: Option<String>) -> Self {
+    pub fn new(my_device: Device, file_storage: String, delegate: Option<Box<dyn NearbyConnectionDelegate>>) -> Self {
         init_logger();
 
+        let mut my_device= my_device.clone();
+        my_device.protocol_version = Some(PROTOCOL_VERSION);
+
         let device_connection_info = DeviceConnectionInfo {
-            device: Some(my_device.clone()),
+            device: Some(my_device),
             ble: None,
             tcp: None
         };
@@ -95,7 +97,6 @@ impl NearbyServer {
             advertise: RwLock::new(false),
             file_storage,
             device_connection_info: RwLock::new(device_connection_info),
-            tmp_dir,
             nearby_connection_delegate,
             current_share_store: Arc::new(RwLock::new(None)),
             requested_download_id: Arc::new(RwLock::new(None))
@@ -139,13 +140,14 @@ impl NearbyServer {
         let parsed_url = Url::parse(&link)
             .map_err(|_| RequestConvenienceShareErrors::NotAValidLink)?;
 
-        if parsed_url.host_str() != Some("intershare.app") {
+        if parsed_url.host_str() != Some("s.intershare.app") {
+            error!("Invalid host: {:?}", parsed_url.host_str());
             return Err(RequestConvenienceShareErrors::NotAValidLink);
         }
 
         let id = parsed_url
             .query_pairs()
-            .find(|(key, _)| key == "id")
+            .find(|(key, _)| key == "i")
             .map(|(_, value)| value)
             .filter(|val| !val.is_empty())
             .ok_or(RequestConvenienceShareErrors::NotAValidLink)
@@ -161,28 +163,28 @@ impl NearbyServer {
 
         let port = parsed_url
             .query_pairs()
-            .find(|(key, _)| key == "port")
+            .find(|(key, _)| key == "p")
             .map(|(_, value)| value)
             .filter(|val| !val.is_empty())
             .ok_or(RequestConvenienceShareErrors::NotAValidLink)?
             .parse::<u32>()
             .map_err(|_| RequestConvenienceShareErrors::NotAValidLink)?;
 
-        let device_id = parsed_url
-            .query_pairs()
-            .find(|(key, _)| key == "device_id")
-            .map(|(_, value)| value)
-            .filter(|val| !val.is_empty())
-            .ok_or(RequestConvenienceShareErrors::NotAValidLink)
-            ?.to_string();
+        // let device_id = parsed_url
+        //     .query_pairs()
+        //     .find(|(key, _)| key == "d")
+        //     .map(|(_, value)| value)
+        //     .filter(|val| !val.is_empty())
+        //     .ok_or(RequestConvenienceShareErrors::NotAValidLink)
+        //     ?.to_string();
 
-        let protocol_version = parsed_url
-            .query_pairs()
-            .find(|(key, _)| key == "protocol_version")
-            .map(|(_, value)| value)
-            .filter(|val| !val.is_empty())
-            .ok_or(RequestConvenienceShareErrors::NotAValidLink)
-            ?.to_string();
+        // let protocol_version = parsed_url
+        //     .query_pairs()
+        //     .find(|(key, _)| key == "v")
+        //     .map(|(_, value)| value)
+        //     .filter(|val| !val.is_empty())
+        //     .ok_or(RequestConvenienceShareErrors::NotAValidLink)
+        //     ?.to_string();
 
 
         let connection = Connection::new(self.ble_l2_cap_client.clone());
@@ -200,7 +202,7 @@ impl NearbyServer {
             Ok(connection) => connection,
             Err(err) => {
                 error!("Error while trying to connect: {:?}", err);
-                return Err(RequestConvenienceShareErrors::FailedToConnect);
+                return Err(RequestConvenienceShareErrors::FailedToConnect { error: err.to_string() });
             }
         };
 
@@ -228,7 +230,7 @@ impl NearbyServer {
             };
 
             let file_storage = self.file_storage.clone();
-            let tcp_server = self.new_tcp_server(delegate, file_storage, self.tmp_dir.clone()).await;
+            let tcp_server = self.new_tcp_server(delegate, file_storage).await;
 
             if let Ok(tcp_server) = tcp_server {
                 let ip = self.get_current_ip();
@@ -264,12 +266,21 @@ impl NearbyServer {
         self.start().await;
     }
 
-    fn create_tmp_file(&self) -> NamedTempFile {
-        #[cfg(not(target_os="android"))]
-        return NamedTempFile::new().expect("Failed to create temporary ZIP file.");
+    pub async fn share_text(&self, text: String, allow_convenience_share: bool) -> Arc<ShareStore> {
 
-        #[cfg(target_os="android")]
-        return NamedTempFile::new_in(self.tmp_dir.clone().expect("tmp dir is not set on android")).expect("Failed to create temporary ZIP file.");
+        let share_store = Arc::new(ShareStore::new(
+            None,
+            Some(text),
+            allow_convenience_share,
+            None,
+            None,
+            self.ble_l2_cap_client.clone(),
+            self.device_connection_info.read().await.clone()
+        ));
+
+        *self.current_share_store.write().await = Some(share_store.clone());
+
+        return share_store;
     }
 
     pub async fn share_files(&self, file_paths: Vec<String>, allow_convenience_share: bool, progress_delegate: Option<Box<dyn ShareProgressDelegate>>) -> Arc<ShareStore> {
@@ -277,7 +288,7 @@ impl NearbyServer {
             progress_delegate.progress_changed(ShareProgressState::Compressing { progress: 0.0 });
         }
 
-        let tmp_file = self.create_tmp_file();
+        let tmp_file = create_tmp_file();
         let zip_file = zip_files(tmp_file.reopen().expect("Failed to reopen tmp file"), &file_paths, &progress_delegate);
 
         let share_store = Arc::new(ShareStore::new(
@@ -292,6 +303,10 @@ impl NearbyServer {
 
         *self.current_share_store.write().await = Some(share_store.clone());
 
+        if let Some(progress_delegate) = &progress_delegate {
+            progress_delegate.progress_changed(ShareProgressState::Finished);
+        }
+
         return share_store
     }
 
@@ -303,7 +318,6 @@ impl NearbyServer {
         };
 
         let file_storage = self.file_storage.clone();
-        let tmp_dir = self.tmp_dir.clone();
         let current_share_store = self.current_share_store.clone();
 
         tokio::spawn(async move {
@@ -328,8 +342,7 @@ impl NearbyServer {
                 let connection_request = ConnectionRequest::new(
                     request,
                     Box::new(encrypted_stream),
-                    file_storage.clone(),
-                    tmp_dir
+                    file_storage.clone()
                 );
 
                 delegate.blocking_read().received_connection_request(Arc::new(connection_request));

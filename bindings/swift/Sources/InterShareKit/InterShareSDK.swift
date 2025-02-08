@@ -890,6 +890,8 @@ public protocol InternalNearbyServerProtocol: AnyObject {
 
     func shareFiles(filePaths: [String], allowConvenienceShare: Bool, progressDelegate: ShareProgressDelegate?) async -> ShareStore
 
+    func shareText(text: String, allowConvenienceShare: Bool) async -> ShareStore
+
     func start() async
 
     func stop() async
@@ -934,14 +936,13 @@ open class InternalNearbyServer:
         return try! rustCall { uniffi_intershare_sdk_ffi_fn_clone_internalnearbyserver(self.pointer, $0) }
     }
 
-    public convenience init(myDevice: Device, fileStorage: String, delegate: NearbyConnectionDelegate?, tmpDir: String?) {
+    public convenience init(myDevice: Device, fileStorage: String, delegate: NearbyConnectionDelegate?) {
         let pointer =
             try! rustCall {
                 uniffi_intershare_sdk_ffi_fn_constructor_internalnearbyserver_new(
                     FfiConverterTypeDevice.lower(myDevice),
                     FfiConverterString.lower(fileStorage),
-                    FfiConverterOptionCallbackInterfaceNearbyConnectionDelegate.lower(delegate),
-                    FfiConverterOptionString.lower(tmpDir), $0
+                    FfiConverterOptionCallbackInterfaceNearbyConnectionDelegate.lower(delegate), $0
                 )
             }
         self.init(unsafeFromRawPointer: pointer)
@@ -1069,6 +1070,23 @@ open class InternalNearbyServer:
             )
     }
 
+    open func shareText(text: String, allowConvenienceShare: Bool) async -> ShareStore {
+        return
+            try! await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_share_text(
+                        self.uniffiClonePointer(),
+                        FfiConverterString.lower(text), FfiConverterBool.lower(allowConvenienceShare)
+                    )
+                },
+                pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_pointer,
+                completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_pointer,
+                freeFunc: ffi_intershare_sdk_ffi_rust_future_free_pointer,
+                liftFunc: FfiConverterTypeShareStore.lift,
+                errorHandler: nil
+            )
+    }
+
     open func start() async {
         return
             try! await uniffiRustCallAsync(
@@ -1152,7 +1170,7 @@ public func FfiConverterTypeInternalNearbyServer_lower(_ value: InternalNearbySe
 public protocol ShareStoreProtocol: AnyObject {
     func generateLink() -> String?
 
-    func generateQrCode() -> [UInt8]?
+    func generateQrCode(darkMode: Bool) -> [UInt8]?
 
     func sendTo(receiver: Device, progressDelegate: SendProgressDelegate?) async throws
 }
@@ -1212,9 +1230,10 @@ open class ShareStore:
         })
     }
 
-    open func generateQrCode() -> [UInt8]? {
+    open func generateQrCode(darkMode: Bool) -> [UInt8]? {
         return try! FfiConverterOptionSequenceUInt8.lift(try! rustCall {
-            uniffi_intershare_sdk_ffi_fn_method_sharestore_generate_qr_code(self.uniffiClonePointer(), $0)
+            uniffi_intershare_sdk_ffi_fn_method_sharestore_generate_qr_code(self.uniffiClonePointer(),
+                                                                            FfiConverterBool.lower(darkMode), $0)
         })
     }
 
@@ -1401,13 +1420,15 @@ public struct Device {
     public var id: String
     public var name: String
     public var deviceType: Int32
+    public var protocolVersion: UInt32?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, name: String, deviceType: Int32) {
+    public init(id: String, name: String, deviceType: Int32, protocolVersion: UInt32? = nil) {
         self.id = id
         self.name = name
         self.deviceType = deviceType
+        self.protocolVersion = protocolVersion
     }
 }
 
@@ -1422,6 +1443,9 @@ extension Device: Equatable, Hashable {
         if lhs.deviceType != rhs.deviceType {
             return false
         }
+        if lhs.protocolVersion != rhs.protocolVersion {
+            return false
+        }
         return true
     }
 
@@ -1429,6 +1453,7 @@ extension Device: Equatable, Hashable {
         hasher.combine(id)
         hasher.combine(name)
         hasher.combine(deviceType)
+        hasher.combine(protocolVersion)
     }
 }
 
@@ -1441,7 +1466,8 @@ public struct FfiConverterTypeDevice: FfiConverterRustBuffer {
             try Device(
                 id: FfiConverterString.read(from: &buf),
                 name: FfiConverterString.read(from: &buf),
-                deviceType: FfiConverterInt32.read(from: &buf)
+                deviceType: FfiConverterInt32.read(from: &buf),
+                protocolVersion: FfiConverterOptionUInt32.read(from: &buf)
             )
     }
 
@@ -1449,6 +1475,7 @@ public struct FfiConverterTypeDevice: FfiConverterRustBuffer {
         FfiConverterString.write(value.id, into: &buf)
         FfiConverterString.write(value.name, into: &buf)
         FfiConverterInt32.write(value.deviceType, into: &buf)
+        FfiConverterOptionUInt32.write(value.protocolVersion, into: &buf)
     }
 }
 
@@ -1597,13 +1624,16 @@ public func FfiConverterTypeTcpConnectionInfo_lower(_ value: TcpConnectionInfo) 
 }
 
 public enum ConnectErrors {
+    case InvalidProtocolVersion
     case Unreachable
+    case NoTextProvided
     case NoFilesProvided
     case FailedToGetConnectionDetails
     case Declined
     case FailedToGetTcpDetails
     case FailedToGetSocketAddress
-    case FailedToOpenTcpStream
+    case FailedToOpenTcpStream(error: String
+    )
     case FailedToEncryptStream(error: String
     )
     case FailedToDetermineFileSize(error: String
@@ -1624,25 +1654,29 @@ public struct FfiConverterTypeConnectErrors: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConnectErrors {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return .Unreachable
-        case 2: return .NoFilesProvided
-        case 3: return .FailedToGetConnectionDetails
-        case 4: return .Declined
-        case 5: return .FailedToGetTcpDetails
-        case 6: return .FailedToGetSocketAddress
-        case 7: return .FailedToOpenTcpStream
-        case 8: return try .FailedToEncryptStream(
+        case 1: return .InvalidProtocolVersion
+        case 2: return .Unreachable
+        case 3: return .NoTextProvided
+        case 4: return .NoFilesProvided
+        case 5: return .FailedToGetConnectionDetails
+        case 6: return .Declined
+        case 7: return .FailedToGetTcpDetails
+        case 8: return .FailedToGetSocketAddress
+        case 9: return try .FailedToOpenTcpStream(
                 error: FfiConverterString.read(from: &buf)
             )
-        case 9: return try .FailedToDetermineFileSize(
+        case 10: return try .FailedToEncryptStream(
                 error: FfiConverterString.read(from: &buf)
             )
-        case 10: return try .FailedToGetTransferRequestResponse(
+        case 11: return try .FailedToDetermineFileSize(
                 error: FfiConverterString.read(from: &buf)
             )
-        case 11: return .FailedToGetBleDetails
-        case 12: return .InternalBleHandlerNotAvailable
-        case 13: return .FailedToEstablishBleConnection
+        case 12: return try .FailedToGetTransferRequestResponse(
+                error: FfiConverterString.read(from: &buf)
+            )
+        case 13: return .FailedToGetBleDetails
+        case 14: return .InternalBleHandlerNotAvailable
+        case 15: return .FailedToEstablishBleConnection
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -1650,47 +1684,54 @@ public struct FfiConverterTypeConnectErrors: FfiConverterRustBuffer {
 
     public static func write(_ value: ConnectErrors, into buf: inout [UInt8]) {
         switch value {
-        case .Unreachable:
+        case .InvalidProtocolVersion:
             writeInt(&buf, Int32(1))
 
-        case .NoFilesProvided:
+        case .Unreachable:
             writeInt(&buf, Int32(2))
 
-        case .FailedToGetConnectionDetails:
+        case .NoTextProvided:
             writeInt(&buf, Int32(3))
 
-        case .Declined:
+        case .NoFilesProvided:
             writeInt(&buf, Int32(4))
 
-        case .FailedToGetTcpDetails:
+        case .FailedToGetConnectionDetails:
             writeInt(&buf, Int32(5))
 
-        case .FailedToGetSocketAddress:
+        case .Declined:
             writeInt(&buf, Int32(6))
 
-        case .FailedToOpenTcpStream:
+        case .FailedToGetTcpDetails:
             writeInt(&buf, Int32(7))
 
-        case let .FailedToEncryptStream(error):
+        case .FailedToGetSocketAddress:
             writeInt(&buf, Int32(8))
-            FfiConverterString.write(error, into: &buf)
 
-        case let .FailedToDetermineFileSize(error):
+        case let .FailedToOpenTcpStream(error):
             writeInt(&buf, Int32(9))
             FfiConverterString.write(error, into: &buf)
 
-        case let .FailedToGetTransferRequestResponse(error):
+        case let .FailedToEncryptStream(error):
             writeInt(&buf, Int32(10))
             FfiConverterString.write(error, into: &buf)
 
-        case .FailedToGetBleDetails:
+        case let .FailedToDetermineFileSize(error):
             writeInt(&buf, Int32(11))
+            FfiConverterString.write(error, into: &buf)
+
+        case let .FailedToGetTransferRequestResponse(error):
+            writeInt(&buf, Int32(12))
+            FfiConverterString.write(error, into: &buf)
+
+        case .FailedToGetBleDetails:
+            writeInt(&buf, Int32(13))
 
         case .InternalBleHandlerNotAvailable:
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(14))
 
         case .FailedToEstablishBleConnection:
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(15))
         }
     }
 }
@@ -1934,7 +1975,8 @@ extension ReceiveProgressState: Equatable, Hashable {}
 public enum RequestConvenienceShareErrors {
     case NotAValidLink
     case IncompatibleProtocolVersion
-    case FailedToConnect
+    case FailedToConnect(error: String
+    )
 }
 
 #if swift(>=5.8)
@@ -1948,7 +1990,9 @@ public struct FfiConverterTypeRequestConvenienceShareErrors: FfiConverterRustBuf
         switch variant {
         case 1: return .NotAValidLink
         case 2: return .IncompatibleProtocolVersion
-        case 3: return .FailedToConnect
+        case 3: return try .FailedToConnect(
+                error: FfiConverterString.read(from: &buf)
+            )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -1962,8 +2006,9 @@ public struct FfiConverterTypeRequestConvenienceShareErrors: FfiConverterRustBuf
         case .IncompatibleProtocolVersion:
             writeInt(&buf, Int32(2))
 
-        case .FailedToConnect:
+        case let .FailedToConnect(error):
             writeInt(&buf, Int32(3))
+            FfiConverterString.write(error, into: &buf)
         }
     }
 }
@@ -2074,6 +2119,7 @@ extension SendProgressState: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum ShareProgressState {
+    case unknown
     case compressing(progress: Double
     )
     case finished
@@ -2089,12 +2135,14 @@ public struct FfiConverterTypeShareProgressState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareProgressState {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return try .compressing(progress: FfiConverterDouble.read(from: &buf)
+        case 1: return .unknown
+
+        case 2: return try .compressing(progress: FfiConverterDouble.read(from: &buf)
             )
 
-        case 2: return .finished
+        case 3: return .finished
 
-        case 3: return .error
+        case 4: return .error
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2102,15 +2150,18 @@ public struct FfiConverterTypeShareProgressState: FfiConverterRustBuffer {
 
     public static func write(_ value: ShareProgressState, into buf: inout [UInt8]) {
         switch value {
-        case let .compressing(progress):
+        case .unknown:
             writeInt(&buf, Int32(1))
+
+        case let .compressing(progress):
+            writeInt(&buf, Int32(2))
             FfiConverterDouble.write(progress, into: &buf)
 
         case .finished:
-            writeInt(&buf, Int32(2))
+            writeInt(&buf, Int32(3))
 
         case .error:
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
         }
     }
 }
@@ -2169,6 +2220,64 @@ extension TransmissionSetupError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum VersionCompatibility {
+    case compatible
+    case outdatedVersion
+    case incompatibleNewVersion
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVersionCompatibility: FfiConverterRustBuffer {
+    typealias SwiftType = VersionCompatibility
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VersionCompatibility {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .compatible
+
+        case 2: return .outdatedVersion
+
+        case 3: return .incompatibleNewVersion
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: VersionCompatibility, into buf: inout [UInt8]) {
+        switch value {
+        case .compatible:
+            writeInt(&buf, Int32(1))
+
+        case .outdatedVersion:
+            writeInt(&buf, Int32(2))
+
+        case .incompatibleNewVersion:
+            writeInt(&buf, Int32(3))
+        }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVersionCompatibility_lift(_ buf: RustBuffer) throws -> VersionCompatibility {
+    return try FfiConverterTypeVersionCompatibility.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVersionCompatibility_lower(_ value: VersionCompatibility) -> RustBuffer {
+    return FfiConverterTypeVersionCompatibility.lower(value)
+}
+
+extension VersionCompatibility: Equatable, Hashable {}
 
 public protocol BleDiscoveryImplementationDelegate: AnyObject {
     func startScanning()
@@ -3133,6 +3242,30 @@ extension FfiConverterCallbackInterfaceShareProgressDelegate: FfiConverter {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
+private struct FfiConverterOptionUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = UInt32?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt32.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
 private struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -3503,6 +3636,14 @@ public func handleIncomingL2capConnection(connectionId: String, nativeStream: Na
         )
 }
 
+public func isCompatible(device: Device) -> VersionCompatibility {
+    return try! FfiConverterTypeVersionCompatibility.lift(try! rustCall {
+        uniffi_intershare_sdk_ffi_fn_func_is_compatible(
+            FfiConverterTypeDevice.lower(device), $0
+        )
+    })
+}
+
 private enum InitializationResult {
     case ok
     case contractVersionMismatch
@@ -3529,6 +3670,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_ffi_checksum_func_handle_incoming_l2cap_connection() != 31096 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_intershare_sdk_ffi_checksum_func_is_compatible() != 44177 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_ffi_checksum_method_connectionrequest_accept() != 5403 {
@@ -3573,7 +3717,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_intershare_sdk_ffi_checksum_method_sharestore_generate_link() != 52573 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_sharestore_generate_qr_code() != 60327 {
+    if uniffi_intershare_sdk_ffi_checksum_method_sharestore_generate_qr_code() != 50690 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_ffi_checksum_method_sharestore_send_to() != 57303 {
@@ -3615,6 +3759,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_share_files() != 22062 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_share_text() != 11088 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_start() != 43187 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3624,7 +3771,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_intershare_sdk_ffi_checksum_constructor_internaldiscovery_new() != 58519 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_constructor_internalnearbyserver_new() != 12675 {
+    if uniffi_intershare_sdk_ffi_checksum_constructor_internalnearbyserver_new() != 57569 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_ffi_checksum_method_blediscoveryimplementationdelegate_start_scanning() != 4072 {

@@ -62,8 +62,7 @@ impl Connection {
             return Ok(Box::new(encrypted_stream));
         }
 
-        error!("Failed to open TCP stream: {:?}", tcp_stream.unwrap_err());
-        return Err(ConnectErrors::FailedToOpenTcpStream);
+        return Err(ConnectErrors::FailedToOpenTcpStream { error: tcp_stream.unwrap_err().to_string() });
     }
 
     pub async fn connect(&self, device: Device, progress_delegate: &Option<Box<dyn SendProgressDelegate>>) -> Result<Box<dyn EncryptedReadWrite>, ConnectErrors> {

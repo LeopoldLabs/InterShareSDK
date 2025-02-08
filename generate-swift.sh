@@ -1,4 +1,5 @@
 #!/usr/bin/env zsh
+set -e
 
 FFI_PROJECT="src/intershare_sdk_ffi/Cargo.toml"
 
@@ -13,11 +14,6 @@ function PrintInfo()
     echo -e "${CYAN}$1${ENDCOLOR}"
 }
 
-function CheckForErrorAndExitIfNecessary()
-{
-    if [ "$?" != "0" ]; then echo -e "${RED}$1${ENDCOLOR}"; exit 1; fi
-}
-
 function PrintDone()
 {
     echo -e "    ${GREEN}Done${ENDCOLOR}"
@@ -30,7 +26,6 @@ function BuildStaticLibrary()
     Target=$1
     PrintInfo "Building for $Target"
     cargo build --manifest-path $FFI_PROJECT --lib --release --target $Target
-    CheckForErrorAndExitIfNecessary
 
     PrintDone
 }
@@ -41,7 +36,6 @@ function GenerateUniffiBindings()
     cargo build --release
     cargo run --bin uniffi-bindgen generate --library target/release/libintershare_sdk_ffi.a --language swift --out-dir "bindings/swift/Sources/InterShareKit"
     # cargo run --bin uniffi-bindgen generate "src/intershare_sdk_ffi/src/intershare_sdk.udl" --language swift --out-dir "bindings/swift/Sources/InterShareSDK"
-    CheckForErrorAndExitIfNecessary
 
     pushd bindings/swift
         mv Sources/InterShareKit/*.h .out/headers/
@@ -64,16 +58,14 @@ function CreateUniversalBinary()
         lipo -create \
           "target/$FirstArchitecture/release/libintershare_sdk_ffi.a" \
           -output "bindings/swift/.out/$Target/libintershare_sdk_ffi.a"
-
-        CheckForErrorAndExitIfNecessary
     else
         lipo -create \
           "target/$FirstArchitecture/release/libintershare_sdk_ffi.a" \
           "target/$SecondArchitecture/release/libintershare_sdk_ffi.a" \
           -output "bindings/swift/.out/$Target/libintershare_sdk_ffi.a"
-
-        CheckForErrorAndExitIfNecessary
     fi
+
+    strip -x "bindings/swift/.out/$Target/libintershare_sdk_ffi.a"
 
     PrintDone
 }
@@ -93,7 +85,6 @@ function GenerateXcFramework()
       -headers bindings/swift/.out/headers/ \
       -output bindings/swift/InterShareSDKFFI.xcframework
 
-    CheckForErrorAndExitIfNecessary
     PrintDone
 }
 
@@ -108,7 +99,7 @@ mkdir bindings/swift/.out/macos
 mkdir bindings/swift/.out/ios
 mkdir bindings/swift/.out/ios-simulator
 
-export MACOSX_DEPLOYMENT_TARGET=13.0
+export MACOSX_DEPLOYMENT_TARGET=12.0
 
 # iOS
 BuildStaticLibrary aarch64-apple-ios
