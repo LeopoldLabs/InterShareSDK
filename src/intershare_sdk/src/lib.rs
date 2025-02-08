@@ -43,6 +43,7 @@ pub mod errors;
 pub mod share_store;
 pub mod connection;
 mod zip;
+mod windows;
 
 pub const PROTOCOL_VERSION: u32 = 0;
 pub const BLE_SERVICE_UUID: &str = "68D60EB2-8AAA-4D72-8851-BD6D64E169B7";

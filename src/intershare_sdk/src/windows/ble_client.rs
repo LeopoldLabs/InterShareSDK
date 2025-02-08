@@ -19,10 +19,9 @@ use windows::{
 };
 use tokio::runtime::Handle;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
-use intershare_sdk::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
-use intershare_sdk::discovery::BleDiscoveryImplementationDelegate;
+use common::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
+use common::traits::BleDiscoveryImplementationDelegate;
 use uniffi::deps::log::{error, info};
-use crate::discovery::InternalDiscovery;
 
 
 pub struct BleClient {

@@ -1,18 +1,10 @@
 [package]
-name = "intershare_windows"
+name = "windows"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-name = "intershare_windows_sdk_ffi"
-crate-type = ["lib", "staticlib", "cdylib"]
-
-[[bin]]
-name = "uniffi-bindgen"
-path = "uniffi-bindgen.rs"
-
 [target.'cfg(windows)'.dependencies]
-intershare_sdk = { package = "intershare_sdk", path = "../intershare_sdk" }
+common = { package = "common", path = "../common" }
 tokio = { version = "1.35.1", features = ["sync", "rt-multi-thread", "macros"] }
 windows = { version = "0.58.0", features = ["Devices_Bluetooth", "Devices_Bluetooth_Advertisement", "Devices_Bluetooth_GenericAttributeProfile", "Foundation", "Storage_Streams", "Devices_Radios", "Win32_Networking_WinSock", "Win32_System_WinRT", "implement", "Foundation_Collections", "Win32_System_Com"] }
 winapi = { version = "0.3.9", features = ["winsock2"] }

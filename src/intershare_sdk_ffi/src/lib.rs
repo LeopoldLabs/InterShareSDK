@@ -3,7 +3,7 @@ use std::sync::Arc;
 pub use intershare_sdk::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID, ClipboardTransferIntent, VersionCompatibility, is_compatible};
 pub use intershare_sdk::connection_request::{ConnectionRequest, ReceiveProgressState, ReceiveProgressDelegate};
 pub use intershare_sdk::Device;
-pub use intershare_sdk::discovery::{BleDiscoveryImplementationDelegate, Discovery};
+use intershare_sdk::discovery::{Discovery, BleDiscoveryImplementationDelegate};
 pub use intershare_sdk::DiscoveryDelegate as DeviceListUpdateDelegate;
 pub use intershare_sdk::encryption::EncryptedStream;
 pub use intershare_sdk::nearby_server::{ShareProgressState, ShareProgressDelegate, BleServerImplementationDelegate, ConnectionIntentType, L2CapDelegate, NearbyConnectionDelegate, NearbyServer};
