@@ -2,7 +2,7 @@ use std::io;
 use std::string::FromUtf8Error;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, uniffi::Error)]
 pub enum ConnectErrors {
     #[error("Invalid protocol version. Receiver device has a unsupported version.")]
     InvalidProtocolVersion,
@@ -50,7 +50,7 @@ pub enum ConnectErrors {
     FailedToGetTransferRequestResponse { error: String },
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, uniffi::Error)]
 pub enum RequestConvenienceShareErrors {
     #[error("Not a valid link")]
     NotAValidLink,
@@ -101,7 +101,7 @@ pub enum IncomingErrors {
     Rejected,
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, uniffi::Error)]
 pub enum DiscoverySetupError {
     #[error("Unable to setup UDP Discovery")]
     UnableToSetupUdp,

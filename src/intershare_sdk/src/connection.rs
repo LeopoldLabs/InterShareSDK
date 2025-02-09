@@ -3,11 +3,12 @@ use log::{error, info};
 use protocol::discovery::{Device, DeviceConnectionInfo};
 use tokio::sync::{oneshot::{self, Sender}, RwLock};
 use uuid::Uuid;
-use crate::{communication::initiate_sender_communication, discovery::Discovery, encryption::{EncryptedReadWrite, EncryptedStream}, errors::ConnectErrors, nearby_server::L2CapDelegate, share_store::{ConnectionMedium, SendProgressDelegate, SendProgressState}, stream::NativeStreamDelegate, transmission::tcp::TcpClient};
-
+use crate::{communication::initiate_sender_communication, encryption::{EncryptedReadWrite, EncryptedStream}, errors::ConnectErrors, nearby_server::L2CapDelegate, share_store::{ConnectionMedium, SendProgressDelegate, SendProgressState}, stream::NativeStreamDelegate, transmission::tcp::TcpClient};
+use crate::discovery::get_connection_details;
 
 static L2CAP_CONNECTIONS: OnceLock<RwLock<HashMap<String, Sender<Box<dyn NativeStreamDelegate>>>>> = OnceLock::new();
 
+#[uniffi::export]
 pub async fn handle_incoming_l2cap_connection(connection_id: String, native_stream: Box<dyn NativeStreamDelegate>) {
     info!("Received incomming L2CAP connection");
 
@@ -68,7 +69,7 @@ impl Connection {
     pub async fn connect(&self, device: Device, progress_delegate: &Option<Box<dyn SendProgressDelegate>>) -> Result<Box<dyn EncryptedReadWrite>, ConnectErrors> {
         L2CAP_CONNECTIONS.get_or_init(|| RwLock::new(HashMap::new()));
 
-        let Some(connection_details) = Discovery::get_connection_details(device) else {
+        let Some(connection_details) = get_connection_details(device) else {
             return Err(ConnectErrors::FailedToGetConnectionDetails);
         };
 

@@ -53,7 +53,7 @@ impl NearbyServer {
         let delegate = tcp_server.delegate.clone();
         let file_storage = tcp_server.file_storage.clone();
         let running = tcp_server.running.clone();
-        let current_share_store = self.current_share_store.clone();
+        // let current_share_store = self.current_share_store.clone();
 
         tokio::spawn(async move {
             while running.load(Ordering::SeqCst) {
@@ -87,7 +87,7 @@ impl NearbyServer {
 
                     delegate.blocking_read().received_connection_request(Arc::new(connection_request));
                 } else {
-                    NearbyServer::received_convenience_download_request(transfer_request, current_share_store.clone()).await;
+                    // NearbyServer::received_convenience_download_request(transfer_request, current_share_store.clone()).await;
                 }
             }
         });

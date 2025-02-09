@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::sync::Arc;
 
 use local_ip_address::local_ip;
-use log::{error, info, warn};
+use log::{error, info};
 use prost_stream::Stream;
 use protocol::communication::request::RequestTypes;
 use protocol::communication::Request;
@@ -21,11 +21,16 @@ use crate::stream::Close;
 use crate::transmission::tcp::TcpServer;
 use crate::zip::zip_files;
 
+#[cfg(target_os="windows")]
+use windows::{Devices::Bluetooth::GenericAttributeProfile::*};
+
+#[uniffi::export(callback_interface)]
 pub trait BleServerImplementationDelegate: Send + Sync + Debug {
     fn start_server(&self);
     fn stop_server(&self);
 }
 
+#[uniffi::export(callback_interface)]
 pub trait L2CapDelegate: Send + Sync + Debug {
     fn open_l2cap_connection(&self, connection_id: String, peripheral_uuid: String, psm: u32);
 }
@@ -35,6 +40,7 @@ pub enum ConnectionIntentType {
     Clipboard
 }
 
+#[derive(uniffi::Enum)]
 pub enum ShareProgressState {
     Unknown,
     Compressing { progress: f64 },
@@ -42,14 +48,17 @@ pub enum ShareProgressState {
     Error
 }
 
+#[uniffi::export(callback_interface)]
 pub trait ShareProgressDelegate: Send + Sync + Debug {
     fn progress_changed(&self, progress: ShareProgressState);
 }
 
+// #[uniffi::export(callback_interface)]
 pub trait NearbyConnectionDelegate: Send + Sync + Debug {
     fn received_connection_request(&self, request: Arc<ConnectionRequest>);
 }
 
+#[uniffi::export(callback_interface)]
 pub trait NearbyInstantReceiveDelegate: Send + Sync + Debug {
     fn requested_instant_file_receive(&self, device: Device, request_id: String) -> bool;
 }
@@ -60,6 +69,7 @@ pub struct CurrentShareStore {
     pub clipboard: Option<String>
 }
 
+// #[derive(uniffi::Object)]
 pub struct NearbyServer {
     pub(crate) tcp_server: RwLock<Option<TcpServer>>,
     ble_server_implementation: RwLock<Option<Box<dyn BleServerImplementationDelegate>>>,
@@ -69,10 +79,16 @@ pub struct NearbyServer {
     pub device_connection_info: RwLock<DeviceConnectionInfo>,
     nearby_connection_delegate: Option<Arc<RwLock<Box<dyn NearbyConnectionDelegate>>>>,
     pub(crate) current_share_store: Arc<RwLock<Option<Arc<ShareStore>>>>,
+    
+    #[cfg(target_os="windows")]
+    pub(crate) gatt_service_provider: std::sync::RwLock<Option<GattServiceProvider>>,
+    
     requested_download_id: Arc<RwLock<Option<String>>>
 }
 
+// #[uniffi::export(async_runtime = "tokio")]
 impl NearbyServer {
+    #[uniffi::constructor]
     pub fn new(my_device: Device, file_storage: String, delegate: Option<Box<dyn NearbyConnectionDelegate>>) -> Self {
         init_logger();
 
@@ -99,6 +115,10 @@ impl NearbyServer {
             device_connection_info: RwLock::new(device_connection_info),
             nearby_connection_delegate,
             current_share_store: Arc::new(RwLock::new(None)),
+
+            #[cfg(target_os="windows")]
+            gatt_service_provider: std::sync::RwLock::new(None),
+            
             requested_download_id: Arc::new(RwLock::new(None))
         };
     }
@@ -256,9 +276,17 @@ impl NearbyServer {
 
         *self.advertise.write().await = true;
 
-        if let Some(ble_advertisement_implementation) = &*self.ble_server_implementation.read().await {
-            ble_advertisement_implementation.start_server();
-        };
+        #[cfg(target_os="windows")]
+        {
+            self.start_windows_server().await;
+        }
+
+        #[cfg(not(target_os="windows"))]
+        {
+            if let Some(ble_advertisement_implementation) = &*self.ble_server_implementation.read().await {
+                ble_advertisement_implementation.start_server();
+            };
+        }
     }
 
     pub async fn restart_server(&self) {
@@ -310,7 +338,7 @@ impl NearbyServer {
         return share_store
     }
 
-    pub fn handle_incoming_connection<T>(&self, native_stream_handle: T) where T: Read + Write + Send + Close + 'static {
+    fn handle_incoming_connection<T>(&self, native_stream_handle: T) where T: Read + Write + Send + Close + 'static {
         let delegate = self.nearby_connection_delegate.clone();
 
         let Some(delegate) = delegate else {
@@ -318,7 +346,7 @@ impl NearbyServer {
         };
 
         let file_storage = self.file_storage.clone();
-        let current_share_store = self.current_share_store.clone();
+        // let current_share_store = self.current_share_store.clone();
 
         tokio::spawn(async move {
             let mut encrypted_stream = match initiate_receiver_communication(native_stream_handle) {
@@ -347,27 +375,27 @@ impl NearbyServer {
 
                 delegate.blocking_read().received_connection_request(Arc::new(connection_request));
             } else {
-                NearbyServer::received_convenience_download_request(request, current_share_store).await;
+                // NearbyServer::received_convenience_download_request(request, current_share_store).await;
             }
         });
     }
 
-    pub(crate) async fn received_convenience_download_request(request: Request, current_share_store: Arc<RwLock<Option<Arc<ShareStore>>>>) {
-        let Some(current_share_store) = &*current_share_store.read().await else {
-            return;
-        };
-
-        if request.share_id != Some(current_share_store.request_id.clone()) {
-            warn!("Received convenience download request, but wrong with a wrong ID. Expected: {}, but received {:?}", current_share_store.request_id.clone(), request.share_id());
-            return;
-        }
-
-        let Some(device) = request.device else {
-            return;
-        };
-
-        let _ = current_share_store.send_to(device, None).await;
-    }
+    // pub(crate) async fn received_convenience_download_request(request: Request, current_share_store: Arc<RwLock<Option<Arc<ShareStore>>>>) {
+    //     let Some(current_share_store) = &*current_share_store.read().await else {
+    //         return;
+    //     };
+    // 
+    //     if request.share_id != Some(current_share_store.request_id.clone()) {
+    //         warn!("Received convenience download request, but wrong with a wrong ID. Expected: {}, but received {:?}", current_share_store.request_id.clone(), request.share_id());
+    //         return;
+    //     }
+    // 
+    //     let Some(device) = request.device else {
+    //         return;
+    //     };
+    // 
+    //     let _ = current_share_store.send_to(device, None).await;
+    // }
 
     pub async fn stop(&self) {
         *self.advertise.write().await = false;
@@ -375,6 +403,10 @@ impl NearbyServer {
 
         *self.tcp_server.write().await = None;
 
+        #[cfg(target_os="windows")]
+        self.stop_windows_server();
+        
+        #[cfg(not(target_os="windows"))]
         if let Some(ble_advertisement_implementation) = &*self.ble_server_implementation.blocking_read() {
             ble_advertisement_implementation.stop_server();
         }

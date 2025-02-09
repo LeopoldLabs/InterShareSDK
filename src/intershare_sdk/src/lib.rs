@@ -28,9 +28,14 @@ use std::sync::Once;
 pub use protocol;
 pub use protocol::communication::ClipboardTransferIntent;
 pub use protocol::discovery::Device;
-pub use protocol::DiscoveryDelegate;
 use tempfile::NamedTempFile;
 pub use thiserror::Error;
+pub use crate::nearby_server::ConnectionIntentType;
+pub use crate::connection_request::{ConnectionRequest, ReceiveProgressState, ReceiveProgressDelegate};
+pub use crate::protocol::discovery::{BluetoothLeConnectionInfo, TcpConnectionInfo};
+pub use crate::protocol::communication::FileTransferIntent;
+pub use crate::nearby_server::{NearbyServer, NearbyConnectionDelegate};
+
 
 pub mod discovery;
 pub mod encryption;
@@ -53,12 +58,24 @@ pub const BLE_BUFFER_SIZE: usize = 1024;
 #[cfg(not(target_os="android"))]
 static INIT_LOGGER: Once = Once::new();
 
+#[uniffi::export]
+pub fn get_ble_service_uuid() -> String {
+    return BLE_SERVICE_UUID.to_string();
+}
+
+#[uniffi::export]
+pub fn get_ble_discovery_characteristic_uuid() -> String {
+    return BLE_DISCOVERY_CHARACTERISTIC_UUID.to_string();
+}
+
+#[derive(uniffi::Enum)]
 pub enum VersionCompatibility {
     Compatible,
     OutdatedVersion,
     IncompatibleNewVersion
 }
 
+#[uniffi::export]
 pub fn is_compatible(device: Device) -> VersionCompatibility {
     let Some(remote_device_version) = device.protocol_version else {
         return VersionCompatibility::OutdatedVersion;
@@ -146,6 +163,7 @@ pub fn init_logger() {
     });
 }
 
+#[uniffi::export]
 pub fn get_log_file_path_str() -> Option<String> {
     if let Ok(path) = get_log_file_path()?.into_os_string().into_string() {
         return Some(path);
@@ -182,3 +200,5 @@ fn create_tmp_file() -> NamedTempFile {
             .expect("Failed to create temporary file.")
     }
 }
+
+uniffi::include_scaffolding!("intershare_sdk");

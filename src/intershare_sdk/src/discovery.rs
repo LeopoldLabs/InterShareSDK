@@ -1,28 +1,57 @@
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::sync::atomic::AtomicBool;
 use log::{info, warn};
-use protocol::DiscoveryDelegate;
+use protocol::discovery;
 use protocol::discovery::{DeviceConnectionInfo, DeviceDiscoveryMessage, Device};
 use protocol::discovery::device_discovery_message::Content;
 use protocol::prost::Message;
 use crate::errors::DiscoverySetupError;
 use crate::init_logger;
 
+#[uniffi::export(callback_interface)]
 pub trait BleDiscoveryImplementationDelegate: Send + Sync + Debug {
     fn start_scanning(&self);
     fn stop_scanning(&self);
 }
 
+#[uniffi::export(callback_interface)]
+pub trait DiscoveryDelegate: Send + Sync + Debug {
+    fn device_added(&self, value: discovery::Device);
+    fn device_removed(&self, device_id: String);
+}
+
 static DISCOVERED_DEVICES: OnceLock<RwLock<HashMap<String, DeviceConnectionInfo>>> = OnceLock::new();
 
+pub fn get_connection_details(device: Device) -> Option<DeviceConnectionInfo> {
+    if DISCOVERED_DEVICES.get().unwrap().read().unwrap().contains_key(&device.id) {
+        return Some(DISCOVERED_DEVICES.get().unwrap().read().unwrap()[&device.id].clone());
+    }
+
+    return None;
+}
+
+#[derive(uniffi::Object)]
 pub struct Discovery {
-    pub ble_discovery_implementation: Option<Box<dyn BleDiscoveryImplementationDelegate>>,
+    pub ble_discovery_implementation: tokio::sync::RwLock<Option<Box<dyn BleDiscoveryImplementationDelegate>>>,
+
+    #[cfg(target_os="windows")]
+    pub(crate) scanning: Arc<AtomicBool>,
+    
     discovery_delegate: Option<Arc<Mutex<Box<dyn DiscoveryDelegate>>>>
 }
 
+impl Debug for Discovery {
+    fn fmt(&self, _f: &mut Formatter<'_>) -> std::fmt::Result {
+        Ok(())
+    }
+}
+
+#[uniffi::export(async_runtime = "tokio")]
 impl Discovery {
-    pub fn new(delegate: Option<Box<dyn DiscoveryDelegate>>) -> Result<Self, DiscoverySetupError> {
+    #[uniffi::constructor]
+    pub fn new(delegate: Option<Box<dyn DiscoveryDelegate>>) -> Result<Arc<Self>, DiscoverySetupError> {
         init_logger();
 
         DISCOVERED_DEVICES.get_or_init(|| RwLock::new(HashMap::new()));
@@ -32,13 +61,17 @@ impl Discovery {
             None => None
         };
 
-        Ok(Self {
-            ble_discovery_implementation: None,
+        return Ok(Arc::new(Self {
+            ble_discovery_implementation: tokio::sync::RwLock::new(None),
+            
+            #[cfg(target_os="windows")]
+            scanning: Arc::new(AtomicBool::new(false)),
+            
             discovery_delegate: callback_arc
-        })
+        }));
     }
 
-    pub fn get_devices(&self) -> Vec<Device> {
+    pub fn get_devices(self: Arc<Self>) -> Vec<Device> {
         let mut devices = vec![];
 
         for device in DISCOVERED_DEVICES.get().unwrap().read().unwrap().iter() {
@@ -48,33 +81,34 @@ impl Discovery {
         return devices
     }
 
-    pub fn get_connection_details(device: Device) -> Option<DeviceConnectionInfo> {
-        if DISCOVERED_DEVICES.get().unwrap().read().unwrap().contains_key(&device.id) {
-            return Some(DISCOVERED_DEVICES.get().unwrap().read().unwrap()[&device.id].clone());
-        }
-
-        return None;
+    pub fn add_ble_implementation(self: Arc<Self>, implementation: Box<dyn BleDiscoveryImplementationDelegate>) {
+        *self.ble_discovery_implementation.blocking_write() = Some(implementation)
     }
 
-    pub fn add_ble_implementation(&mut self, implementation: Box<dyn BleDiscoveryImplementationDelegate>) {
-        self.ble_discovery_implementation = Some(implementation)
-    }
-
-    pub fn start(&self) {
+    pub async fn start(self: Arc<Self>) {
         DISCOVERED_DEVICES.get().unwrap().write().unwrap().clear();
 
-        if let Some(ble_discovery_implementation) = &self.ble_discovery_implementation {
+        #[cfg(target_os="windows")]
+        self.windows_start_scanning();
+
+        #[cfg(not(target_os="windows"))]
+        if let Some(ble_discovery_implementation) = &*self.ble_discovery_implementation.read().await {
             ble_discovery_implementation.start_scanning();
         }
     }
 
-    pub fn stop(&self) {
-        if let Some(ble_discovery_implementation) = &self.ble_discovery_implementation {
+    pub async fn stop(self: Arc<Self>) {
+
+        #[cfg(target_os="windows")]
+        self.windows_stop_scanning();
+
+        #[cfg(not(target_os="windows"))]
+        if let Some(ble_discovery_implementation) = &*self.ble_discovery_implementation.read().await {
             ble_discovery_implementation.stop_scanning();
         }
     }
 
-    pub fn parse_discovery_message(&mut self, data: Vec<u8>, ble_uuid: Option<String>) {
+    pub fn parse_discovery_message(self: Arc<Self>, data: Vec<u8>, ble_uuid: Option<String>) {
         info!("Got discovery message from {:?}", ble_uuid);
 
         let discovery_message = DeviceDiscoveryMessage::decode_length_delimited(data.as_slice());
@@ -121,13 +155,13 @@ impl Discovery {
         };
     }
 
-    fn add_discovered_device(&self, device: Device) {
+    fn add_discovered_device(self: Arc<Self>, device: Device) {
         if let Some(discovery_delegate) = &self.discovery_delegate {
             discovery_delegate.lock().expect("Failed to lock discovery_delegate").device_added(device);
         }
     }
 
-    fn remove_discovered_device(&self, device_id: String) {
+    fn remove_discovered_device(self: Arc<Self>, device_id: String) {
         if let Some(discovery_delegate) = &self.discovery_delegate {
             discovery_delegate.lock().expect("Failed to lock discovery_delegate").device_removed(device_id);
         }

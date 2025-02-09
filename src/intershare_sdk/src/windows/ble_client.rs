@@ -1,6 +1,6 @@
-use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use log::{error, info};
 use windows::{
     core::{Result, GUID},
     Devices::Bluetooth::{
@@ -19,20 +19,14 @@ use windows::{
 };
 use tokio::runtime::Handle;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
-use common::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
-use common::traits::BleDiscoveryImplementationDelegate;
-use uniffi::deps::log::{error, info};
+use crate::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
+use crate::discovery::Discovery;
 
 
-pub struct BleClient {
-    internal_discovery: Arc<Mutex<InternalDiscovery>>,
-    scanning: Arc<AtomicBool>,
-}
-
-impl BleDiscoveryImplementationDelegate for BleClient {
-    fn start_scanning(&self) {
-        let internal_discovery = self.internal_discovery.clone();
+impl Discovery {
+    pub(crate) fn windows_start_scanning(self: Arc<Self>) {
         let scanning = self.scanning.clone();
+        let self_copy = self.clone();
 
         scanning.store(true, Ordering::Relaxed);
 
@@ -49,29 +43,22 @@ impl BleDiscoveryImplementationDelegate for BleClient {
             let handle = rt.handle().clone();
 
             rt.block_on(async {
-                if let Err(e) = BleClient::scan_and_connect(internal_discovery, scanning, handle).await {
+                if let Err(e) = Self::scan_and_connect(self_copy, scanning, handle).await {
                     error!("Error during scanning: {:?}", e);
                 }
             });
         });
     }
 
-    fn stop_scanning(&self) {
+    pub(crate) fn windows_stop_scanning(&self) {
         self.scanning.store(false, Ordering::Relaxed);
     }
 
 }
 
-impl BleClient {
-    pub fn new(internal_discovery: Arc<Mutex<InternalDiscovery>>) -> Self {
-        Self {
-            internal_discovery,
-            scanning: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
+impl Discovery {
     async fn scan_and_connect(
-        internal_discovery: Arc<Mutex<InternalDiscovery>>,
+        internal_discovery: Arc<Self>,
         scanning: Arc<AtomicBool>,
         runtime_handle: Handle
     ) -> Result<()> {
@@ -105,7 +92,7 @@ impl BleClient {
                 devices.push(ble_address);
 
                 runtime_handle.spawn(async move {
-                    if let Err(e) = BleClient::connect_and_read_characteristic(ble_address, internal_discovery, local_name).await {
+                    if let Err(e) = Self::connect_and_read_characteristic(ble_address, internal_discovery, local_name).await {
                         error!("Error connecting to device: {:?}", e);
                     }
                 });
@@ -132,7 +119,7 @@ impl BleClient {
 
     async fn connect_and_read_characteristic(
         ble_address: u64,
-        internal_discovery: Arc<Mutex<InternalDiscovery>>,
+        internal_discovery: Arc<Self>,
         device_name: String
     ) -> Result<()> {
         // Connect to the device
@@ -182,18 +169,8 @@ impl BleClient {
         let mut buffer = vec![0u8; length];
         reader.ReadBytes(&mut buffer)?;
 
-        // Process the data
-        {
-            let mut discovery = internal_discovery.lock().unwrap();
-            discovery.parse_discovery_message(buffer, Some(device_id));
-        }
+        internal_discovery.parse_discovery_message(buffer, Some(device_id));
 
-        Ok(())
-    }
-}
-
-impl Debug for BleClient {
-    fn fmt(&self, _f: &mut Formatter<'_>) -> std::fmt::Result {
         Ok(())
     }
 }

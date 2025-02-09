@@ -6,6 +6,7 @@ pub trait Close {
     fn close(&self);
 }
 
+#[uniffi::export(callback_interface)]
 pub trait NativeStreamDelegate: Send + Sync + Debug {
     fn read(&self, buffer_length: u64) -> Vec<u8>;
     fn write(&self, data: Vec<u8>) -> u64;

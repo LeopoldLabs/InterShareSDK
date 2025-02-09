@@ -1,0 +1,67 @@
+namespace InterShareSDK {
+};
+
+dictionary Device {
+    string id;
+    string name;
+    i32 device_type;
+    u32? protocol_version = null;
+};
+
+dictionary BluetoothLeConnectionInfo {
+    string uuid;
+    u32 psm;
+};
+
+dictionary TcpConnectionInfo {
+    string hostname;
+    u32 port;
+};
+
+enum ConnectionIntentType {
+    "FileTransfer",
+    "Clipboard"
+};
+
+dictionary FileTransferIntent {
+    string? file_name;
+    u64 file_size;
+    u64 file_count;
+};
+
+dictionary ClipboardTransferIntent {
+    string clipboard_content;
+};
+
+[Enum]
+interface ReceiveProgressState {
+    Unknown();
+    Handshake();
+    Receiving(double progress);
+    Extracting();
+    Cancelled();
+    Finished();
+};
+
+callback interface ReceiveProgressDelegate {
+    void progress_changed(ReceiveProgressState progress);
+};
+
+interface ConnectionRequest {
+    Device get_sender();
+    ConnectionIntentType get_intent_type();
+    FileTransferIntent? get_file_transfer_intent();
+    ClipboardTransferIntent? get_clipboard_intent();
+    void set_progress_delegate(ReceiveProgressDelegate delegate);
+    void cancel();
+    sequence<string>? accept();
+    void decline();
+};
+
+callback interface NearbyConnectionDelegate {
+    void received_connection_request(ConnectionRequest request);
+};
+        
+interface NearbyServer {
+    constructor(Device my_device, string file_storage, NearbyConnectionDelegate? delegate);
+};
