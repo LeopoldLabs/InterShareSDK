@@ -65,10 +65,10 @@ public class NearbyServer {
     public var state: BluetoothState { get { bleServer.state } }
 
     public init(myDevice: Device, storage: String, delegate: NearbyServerDelegate) {
-        internalHandler = InternalNearbyServer(myDevice: myDevice, fileStorage: storage, delegate: delegate, tmpDir: nil)
+        internalHandler = InternalNearbyServer(myDevice: myDevice, fileStorage: storage, delegate: delegate)
         bleServer = BLEPeripheralManager(handler: internalHandler, delegate: delegate)
 
-        internalHandler.addBleImplementation(bleImplementation: bleServer)
+        internalHandler.addBluetoothImplementation(implementation: bleServer)
         internalHandler.addL2CapClient(delegate: L2CAPClient(internalHandler: internalHandler))
 
         lastKnownIp = internalHandler.getCurrentIp()

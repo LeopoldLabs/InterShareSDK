@@ -34,7 +34,10 @@ pub use crate::nearby_server::ConnectionIntentType;
 pub use crate::connection_request::{ConnectionRequest, ReceiveProgressState, ReceiveProgressDelegate};
 pub use crate::protocol::discovery::{BluetoothLeConnectionInfo, TcpConnectionInfo};
 pub use crate::protocol::communication::FileTransferIntent;
-pub use crate::nearby_server::{NearbyServer, NearbyConnectionDelegate};
+pub use crate::nearby_server::{InternalNearbyServer, NearbyConnectionDelegate};
+pub use crate::nearby_server::{ShareProgressDelegate, ShareProgressState};
+pub use crate::errors::{ConnectErrors};
+pub use crate::share_store::{ShareStore, ConnectionMedium, SendProgressDelegate, SendProgressState};
 
 
 pub mod discovery;

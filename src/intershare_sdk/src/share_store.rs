@@ -40,7 +40,14 @@ pub struct ShareStore {
     device_connection_info: DeviceConnectionInfo
 }
 
+fn update_progress(progress_delegate: &Option<Box<dyn SendProgressDelegate>>, state: SendProgressState) {
+    if let Some(progress_delegate) = progress_delegate {
+        progress_delegate.progress_changed(state);
+    }
+}
+
 impl ShareStore {
+    #[uniffi::constructor]
     pub fn new(
             file_paths: Option<Vec<String>>,
             clipboard: Option<String>,
@@ -61,12 +68,6 @@ impl ShareStore {
         }
     }
 
-    fn update_progress(progress_delegate: &Option<Box<dyn SendProgressDelegate>>, state: SendProgressState) {
-        if let Some(progress_delegate) = progress_delegate {
-            progress_delegate.progress_changed(state);
-        }
-    }
-
     pub async fn send_to(&self, receiver: Device, progress_delegate: Option<Box<dyn SendProgressDelegate>>) -> Result<(), ConnectErrors> {
         if self.file_paths.is_none() {
             return self.send_text(receiver, progress_delegate).await
@@ -80,21 +81,21 @@ impl ShareStore {
             return Err(ConnectErrors::NoTextProvided);
         };
 
-        ShareStore::update_progress(&progress_delegate, SendProgressState::Connecting);
+        update_progress(&progress_delegate, SendProgressState::Connecting);
 
         let connection = Connection::new(self.ble_l2_cap_client.clone());
 
         let mut encrypted_stream = match connection.connect(receiver, &progress_delegate).await {
             Ok(connection) => connection,
             Err(error) => {
-                ShareStore::update_progress(&progress_delegate, SendProgressState::Unknown);
+                update_progress(&progress_delegate, SendProgressState::Unknown);
                 return Err(error)
             }
         };
 
         let mut proto_stream = Stream::new(&mut encrypted_stream);
 
-        ShareStore::update_progress(&progress_delegate, SendProgressState::Transferring { progress: 0.0 });
+        update_progress(&progress_delegate, SendProgressState::Transferring { progress: 0.0 });
 
         let transfer_request = Request {
             r#type: RequestTypes::ShareRequest as i32,
@@ -106,7 +107,7 @@ impl ShareStore {
         };
 
         let _ = proto_stream.send(&transfer_request);
-        ShareStore::update_progress(&progress_delegate, SendProgressState::Transferring { progress: 1.0 });
+        update_progress(&progress_delegate, SendProgressState::Transferring { progress: 1.0 });
 
         return Ok(());
     }
@@ -124,21 +125,21 @@ impl ShareStore {
             return Err(ConnectErrors::NoFilesProvided);
         };
 
-        ShareStore::update_progress(&progress_delegate, SendProgressState::Connecting);
+        update_progress(&progress_delegate, SendProgressState::Connecting);
 
         let connection = Connection::new(self.ble_l2_cap_client.clone());
 
         let mut encrypted_stream = match connection.connect(receiver, &progress_delegate).await {
             Ok(connection) => connection,
             Err(error) => {
-                ShareStore::update_progress(&progress_delegate, SendProgressState::Unknown);
+                update_progress(&progress_delegate, SendProgressState::Unknown);
                 return Err(error)
             }
         };
 
         let mut proto_stream = Stream::new(&mut encrypted_stream);
 
-        ShareStore::update_progress(&progress_delegate, SendProgressState::Requesting);
+        update_progress(&progress_delegate, SendProgressState::Requesting);
 
         let file_name = {
             if file_paths.len() == 1 {
@@ -174,13 +175,13 @@ impl ShareStore {
         };
 
         if !response.accepted {
-            ShareStore::update_progress(&progress_delegate, SendProgressState::Declined);
+            update_progress(&progress_delegate, SendProgressState::Declined);
             return Err(ConnectErrors::Declined);
         }
 
         let mut buffer = [0; 1024];
 
-        ShareStore::update_progress(&progress_delegate, SendProgressState::Transferring { progress: 0.0 });
+        update_progress(&progress_delegate, SendProgressState::Transferring { progress: 0.0 });
 
         let mut all_written: usize = 0;
 
@@ -202,15 +203,15 @@ impl ShareStore {
 
             all_written += written_bytes;
 
-            ShareStore::update_progress(&progress_delegate, SendProgressState::Transferring { progress: (all_written as f64 / file_size as f64) });
+            update_progress(&progress_delegate, SendProgressState::Transferring { progress: (all_written as f64 / file_size as f64) });
         }
 
         info!("Written {all_written} bytes");
 
         if (all_written as f64) < (file_size as f64) {
-            ShareStore::update_progress(&progress_delegate, SendProgressState::Cancelled);
+            update_progress(&progress_delegate, SendProgressState::Cancelled);
         } else {
-            ShareStore::update_progress(&progress_delegate, SendProgressState::Finished);
+            update_progress(&progress_delegate, SendProgressState::Finished);
         }
 
         return Ok(());

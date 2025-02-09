@@ -3,6 +3,13 @@ name = "intershare_sdk"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+
 [dependencies]
 protocol = { path = "../protocol" }
 x25519-dalek = { version = "2.0.1", default-features = false }

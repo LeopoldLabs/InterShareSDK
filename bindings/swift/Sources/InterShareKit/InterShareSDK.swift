@@ -25,13 +25,13 @@ private extension RustBuffer {
     }
 
     static func from(_ ptr: UnsafeBufferPointer<UInt8>) -> RustBuffer {
-        try! rustCall { ffi_intershare_sdk_ffi_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
+        try! rustCall { ffi_intershare_sdk_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
     }
 
     // Frees the buffer in place.
     // The buffer must not be used after this is called.
     func deallocate() {
-        try! rustCall { ffi_intershare_sdk_ffi_rustbuffer_free(self, $0) }
+        try! rustCall { ffi_intershare_sdk_rustbuffer_free(self, $0) }
     }
 }
 
@@ -574,6 +574,8 @@ public protocol ConnectionRequestProtocol: AnyObject {
     func getSender() -> Device
 
     func setProgressDelegate(delegate: ReceiveProgressDelegate)
+
+    func updateProgress(newState: ReceiveProgressState)
 }
 
 open class ConnectionRequest:
@@ -612,7 +614,7 @@ open class ConnectionRequest:
         @_documentation(visibility: private)
     #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_intershare_sdk_ffi_fn_clone_connectionrequest(self.pointer, $0) }
+        return try! rustCall { uniffi_intershare_sdk_fn_clone_connectionrequest(self.pointer, $0) }
     }
 
     // No primary constructor declared for this class.
@@ -622,52 +624,58 @@ open class ConnectionRequest:
             return
         }
 
-        try! rustCall { uniffi_intershare_sdk_ffi_fn_free_connectionrequest(pointer, $0) }
+        try! rustCall { uniffi_intershare_sdk_fn_free_connectionrequest(pointer, $0) }
     }
 
     open func accept() -> [String]? {
         return try! FfiConverterOptionSequenceString.lift(try! rustCall {
-            uniffi_intershare_sdk_ffi_fn_method_connectionrequest_accept(self.uniffiClonePointer(), $0)
+            uniffi_intershare_sdk_fn_method_connectionrequest_accept(self.uniffiClonePointer(), $0)
         })
     }
 
     open func cancel() { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_connectionrequest_cancel(self.uniffiClonePointer(), $0)
+        uniffi_intershare_sdk_fn_method_connectionrequest_cancel(self.uniffiClonePointer(), $0)
     }
     }
 
     open func decline() { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_connectionrequest_decline(self.uniffiClonePointer(), $0)
+        uniffi_intershare_sdk_fn_method_connectionrequest_decline(self.uniffiClonePointer(), $0)
     }
     }
 
     open func getClipboardIntent() -> ClipboardTransferIntent? {
         return try! FfiConverterOptionTypeClipboardTransferIntent.lift(try! rustCall {
-            uniffi_intershare_sdk_ffi_fn_method_connectionrequest_get_clipboard_intent(self.uniffiClonePointer(), $0)
+            uniffi_intershare_sdk_fn_method_connectionrequest_get_clipboard_intent(self.uniffiClonePointer(), $0)
         })
     }
 
     open func getFileTransferIntent() -> FileTransferIntent? {
         return try! FfiConverterOptionTypeFileTransferIntent.lift(try! rustCall {
-            uniffi_intershare_sdk_ffi_fn_method_connectionrequest_get_file_transfer_intent(self.uniffiClonePointer(), $0)
+            uniffi_intershare_sdk_fn_method_connectionrequest_get_file_transfer_intent(self.uniffiClonePointer(), $0)
         })
     }
 
     open func getIntentType() -> ConnectionIntentType {
         return try! FfiConverterTypeConnectionIntentType.lift(try! rustCall {
-            uniffi_intershare_sdk_ffi_fn_method_connectionrequest_get_intent_type(self.uniffiClonePointer(), $0)
+            uniffi_intershare_sdk_fn_method_connectionrequest_get_intent_type(self.uniffiClonePointer(), $0)
         })
     }
 
     open func getSender() -> Device {
         return try! FfiConverterTypeDevice.lift(try! rustCall {
-            uniffi_intershare_sdk_ffi_fn_method_connectionrequest_get_sender(self.uniffiClonePointer(), $0)
+            uniffi_intershare_sdk_fn_method_connectionrequest_get_sender(self.uniffiClonePointer(), $0)
         })
     }
 
     open func setProgressDelegate(delegate: ReceiveProgressDelegate) { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_connectionrequest_set_progress_delegate(self.uniffiClonePointer(),
-                                                                                    FfiConverterCallbackInterfaceReceiveProgressDelegate.lower(delegate), $0)
+        uniffi_intershare_sdk_fn_method_connectionrequest_set_progress_delegate(self.uniffiClonePointer(),
+                                                                                FfiConverterCallbackInterfaceReceiveProgressDelegate.lower(delegate), $0)
+    }
+    }
+
+    open func updateProgress(newState: ReceiveProgressState) { try! rustCall {
+        uniffi_intershare_sdk_fn_method_connectionrequest_update_progress(self.uniffiClonePointer(),
+                                                                          FfiConverterTypeReceiveProgressState.lower(newState), $0)
     }
     }
 }
@@ -722,9 +730,13 @@ public func FfiConverterTypeConnectionRequest_lower(_ value: ConnectionRequest) 
 public protocol InternalDiscoveryProtocol: AnyObject {
     func addBleImplementation(implementation: BleDiscoveryImplementationDelegate)
 
+    func addDiscoveredDevice(device: Device)
+
     func getDevices() -> [Device]
 
     func parseDiscoveryMessage(data: Data, bleUuid: String?)
+
+    func removeDiscoveredDevice(deviceId: String)
 
     func start()
 
@@ -767,13 +779,13 @@ open class InternalDiscovery:
         @_documentation(visibility: private)
     #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_intershare_sdk_ffi_fn_clone_internaldiscovery(self.pointer, $0) }
+        return try! rustCall { uniffi_intershare_sdk_fn_clone_internaldiscovery(self.pointer, $0) }
     }
 
     public convenience init(delegate: DeviceListUpdateDelegate?) throws {
         let pointer =
             try rustCallWithError(FfiConverterTypeDiscoverySetupError.lift) {
-                uniffi_intershare_sdk_ffi_fn_constructor_internaldiscovery_new(
+                uniffi_intershare_sdk_fn_constructor_internaldiscovery_new(
                     FfiConverterOptionCallbackInterfaceDeviceListUpdateDelegate.lower(delegate), $0
                 )
             }
@@ -785,35 +797,47 @@ open class InternalDiscovery:
             return
         }
 
-        try! rustCall { uniffi_intershare_sdk_ffi_fn_free_internaldiscovery(pointer, $0) }
+        try! rustCall { uniffi_intershare_sdk_fn_free_internaldiscovery(pointer, $0) }
     }
 
     open func addBleImplementation(implementation: BleDiscoveryImplementationDelegate) { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_internaldiscovery_add_ble_implementation(self.uniffiClonePointer(),
-                                                                                     FfiConverterCallbackInterfaceBleDiscoveryImplementationDelegate.lower(implementation), $0)
+        uniffi_intershare_sdk_fn_method_internaldiscovery_add_ble_implementation(self.uniffiClonePointer(),
+                                                                                 FfiConverterCallbackInterfaceBleDiscoveryImplementationDelegate.lower(implementation), $0)
+    }
+    }
+
+    open func addDiscoveredDevice(device: Device) { try! rustCall {
+        uniffi_intershare_sdk_fn_method_internaldiscovery_add_discovered_device(self.uniffiClonePointer(),
+                                                                                FfiConverterTypeDevice.lower(device), $0)
     }
     }
 
     open func getDevices() -> [Device] {
         return try! FfiConverterSequenceTypeDevice.lift(try! rustCall {
-            uniffi_intershare_sdk_ffi_fn_method_internaldiscovery_get_devices(self.uniffiClonePointer(), $0)
+            uniffi_intershare_sdk_fn_method_internaldiscovery_get_devices(self.uniffiClonePointer(), $0)
         })
     }
 
     open func parseDiscoveryMessage(data: Data, bleUuid: String?) { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_internaldiscovery_parse_discovery_message(self.uniffiClonePointer(),
-                                                                                      FfiConverterData.lower(data),
-                                                                                      FfiConverterOptionString.lower(bleUuid), $0)
+        uniffi_intershare_sdk_fn_method_internaldiscovery_parse_discovery_message(self.uniffiClonePointer(),
+                                                                                  FfiConverterData.lower(data),
+                                                                                  FfiConverterOptionString.lower(bleUuid), $0)
+    }
+    }
+
+    open func removeDiscoveredDevice(deviceId: String) { try! rustCall {
+        uniffi_intershare_sdk_fn_method_internaldiscovery_remove_discovered_device(self.uniffiClonePointer(),
+                                                                                   FfiConverterString.lower(deviceId), $0)
     }
     }
 
     open func start() { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_internaldiscovery_start(self.uniffiClonePointer(), $0)
+        uniffi_intershare_sdk_fn_method_internaldiscovery_start(self.uniffiClonePointer(), $0)
     }
     }
 
     open func stop() { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_internaldiscovery_stop(self.uniffiClonePointer(), $0)
+        uniffi_intershare_sdk_fn_method_internaldiscovery_stop(self.uniffiClonePointer(), $0)
     }
     }
 }
@@ -866,7 +890,7 @@ public func FfiConverterTypeInternalDiscovery_lower(_ value: InternalDiscovery) 
 }
 
 public protocol InternalNearbyServerProtocol: AnyObject {
-    func addBleImplementation(bleImplementation: BleServerImplementationDelegate)
+    func addBluetoothImplementation(implementation: BleServerImplementationDelegate)
 
     func addL2CapClient(delegate: L2CapDelegate)
 
@@ -880,13 +904,16 @@ public protocol InternalNearbyServerProtocol: AnyObject {
 
     func handleIncomingConnection(nativeStreamHandle: NativeStreamDelegate)
 
+    /**
+     * https://share.intershare.app?id=hgf8o47fdsb394mv385&ip=192.168.12.13&port=5200&device_id=9A403351-A926-4D1C-855F-432A6ED51E0E&protocol_version=1
+     */
     func requestDownload(link: String) async throws
 
     func restartServer() async
 
-    func setBleConnectionDetails(bleDetails: BluetoothLeConnectionInfo)
+    func setBluetoothLeDetails(bleInfo: BluetoothLeConnectionInfo)
 
-    func setTcpDetails(tcpDetails: TcpConnectionInfo)
+    func setTcpDetails(tcpInfo: TcpConnectionInfo)
 
     func shareFiles(filePaths: [String], allowConvenienceShare: Bool, progressDelegate: ShareProgressDelegate?) async -> ShareStore
 
@@ -933,13 +960,13 @@ open class InternalNearbyServer:
         @_documentation(visibility: private)
     #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_intershare_sdk_ffi_fn_clone_internalnearbyserver(self.pointer, $0) }
+        return try! rustCall { uniffi_intershare_sdk_fn_clone_internalnearbyserver(self.pointer, $0) }
     }
 
     public convenience init(myDevice: Device, fileStorage: String, delegate: NearbyConnectionDelegate?) {
         let pointer =
             try! rustCall {
-                uniffi_intershare_sdk_ffi_fn_constructor_internalnearbyserver_new(
+                uniffi_intershare_sdk_fn_constructor_internalnearbyserver_new(
                     FfiConverterTypeDevice.lower(myDevice),
                     FfiConverterString.lower(fileStorage),
                     FfiConverterOptionCallbackInterfaceNearbyConnectionDelegate.lower(delegate), $0
@@ -953,24 +980,24 @@ open class InternalNearbyServer:
             return
         }
 
-        try! rustCall { uniffi_intershare_sdk_ffi_fn_free_internalnearbyserver(pointer, $0) }
+        try! rustCall { uniffi_intershare_sdk_fn_free_internalnearbyserver(pointer, $0) }
     }
 
-    open func addBleImplementation(bleImplementation: BleServerImplementationDelegate) { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_add_ble_implementation(self.uniffiClonePointer(),
-                                                                                        FfiConverterCallbackInterfaceBleServerImplementationDelegate.lower(bleImplementation), $0)
+    open func addBluetoothImplementation(implementation: BleServerImplementationDelegate) { try! rustCall {
+        uniffi_intershare_sdk_fn_method_internalnearbyserver_add_bluetooth_implementation(self.uniffiClonePointer(),
+                                                                                          FfiConverterCallbackInterfaceBleServerImplementationDelegate.lower(implementation), $0)
     }
     }
 
     open func addL2CapClient(delegate: L2CapDelegate) { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_add_l2_cap_client(self.uniffiClonePointer(),
-                                                                                   FfiConverterCallbackInterfaceL2CapDelegate.lower(delegate), $0)
+        uniffi_intershare_sdk_fn_method_internalnearbyserver_add_l2_cap_client(self.uniffiClonePointer(),
+                                                                               FfiConverterCallbackInterfaceL2CapDelegate.lower(delegate), $0)
     }
     }
 
     open func changeDevice(newDevice: Device) { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_change_device(self.uniffiClonePointer(),
-                                                                               FfiConverterTypeDevice.lower(newDevice), $0)
+        uniffi_intershare_sdk_fn_method_internalnearbyserver_change_device(self.uniffiClonePointer(),
+                                                                           FfiConverterTypeDevice.lower(newDevice), $0)
     }
     }
 
@@ -978,13 +1005,13 @@ open class InternalNearbyServer:
         return
             try! await uniffiRustCallAsync(
                 rustFutureFunc: {
-                    uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_get_advertisement_data(
+                    uniffi_intershare_sdk_fn_method_internalnearbyserver_get_advertisement_data(
                         self.uniffiClonePointer()
                     )
                 },
-                pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_rust_buffer,
-                completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_rust_buffer,
-                freeFunc: ffi_intershare_sdk_ffi_rust_future_free_rust_buffer,
+                pollFunc: ffi_intershare_sdk_rust_future_poll_rust_buffer,
+                completeFunc: ffi_intershare_sdk_rust_future_complete_rust_buffer,
+                freeFunc: ffi_intershare_sdk_rust_future_free_rust_buffer,
                 liftFunc: FfiConverterData.lift,
                 errorHandler: nil
             )
@@ -992,34 +1019,37 @@ open class InternalNearbyServer:
 
     open func getCurrentIp() -> String? {
         return try! FfiConverterOptionString.lift(try! rustCall {
-            uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_get_current_ip(self.uniffiClonePointer(), $0)
+            uniffi_intershare_sdk_fn_method_internalnearbyserver_get_current_ip(self.uniffiClonePointer(), $0)
         })
     }
 
     open func getDeviceName() -> String? {
         return try! FfiConverterOptionString.lift(try! rustCall {
-            uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_get_device_name(self.uniffiClonePointer(), $0)
+            uniffi_intershare_sdk_fn_method_internalnearbyserver_get_device_name(self.uniffiClonePointer(), $0)
         })
     }
 
     open func handleIncomingConnection(nativeStreamHandle: NativeStreamDelegate) { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_handle_incoming_connection(self.uniffiClonePointer(),
-                                                                                            FfiConverterCallbackInterfaceNativeStreamDelegate.lower(nativeStreamHandle), $0)
+        uniffi_intershare_sdk_fn_method_internalnearbyserver_handle_incoming_connection(self.uniffiClonePointer(),
+                                                                                        FfiConverterCallbackInterfaceNativeStreamDelegate.lower(nativeStreamHandle), $0)
     }
     }
 
+    /**
+     * https://share.intershare.app?id=hgf8o47fdsb394mv385&ip=192.168.12.13&port=5200&device_id=9A403351-A926-4D1C-855F-432A6ED51E0E&protocol_version=1
+     */
     open func requestDownload(link: String) async throws {
         return
             try await uniffiRustCallAsync(
                 rustFutureFunc: {
-                    uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_request_download(
+                    uniffi_intershare_sdk_fn_method_internalnearbyserver_request_download(
                         self.uniffiClonePointer(),
                         FfiConverterString.lower(link)
                     )
                 },
-                pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_void,
-                completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_void,
-                freeFunc: ffi_intershare_sdk_ffi_rust_future_free_void,
+                pollFunc: ffi_intershare_sdk_rust_future_poll_void,
+                completeFunc: ffi_intershare_sdk_rust_future_complete_void,
+                freeFunc: ffi_intershare_sdk_rust_future_free_void,
                 liftFunc: { $0 },
                 errorHandler: FfiConverterTypeRequestConvenienceShareErrors.lift
             )
@@ -1029,27 +1059,27 @@ open class InternalNearbyServer:
         return
             try! await uniffiRustCallAsync(
                 rustFutureFunc: {
-                    uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_restart_server(
+                    uniffi_intershare_sdk_fn_method_internalnearbyserver_restart_server(
                         self.uniffiClonePointer()
                     )
                 },
-                pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_void,
-                completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_void,
-                freeFunc: ffi_intershare_sdk_ffi_rust_future_free_void,
+                pollFunc: ffi_intershare_sdk_rust_future_poll_void,
+                completeFunc: ffi_intershare_sdk_rust_future_complete_void,
+                freeFunc: ffi_intershare_sdk_rust_future_free_void,
                 liftFunc: { $0 },
                 errorHandler: nil
             )
     }
 
-    open func setBleConnectionDetails(bleDetails: BluetoothLeConnectionInfo) { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_set_ble_connection_details(self.uniffiClonePointer(),
-                                                                                            FfiConverterTypeBluetoothLeConnectionInfo.lower(bleDetails), $0)
+    open func setBluetoothLeDetails(bleInfo: BluetoothLeConnectionInfo) { try! rustCall {
+        uniffi_intershare_sdk_fn_method_internalnearbyserver_set_bluetooth_le_details(self.uniffiClonePointer(),
+                                                                                      FfiConverterTypeBluetoothLeConnectionInfo.lower(bleInfo), $0)
     }
     }
 
-    open func setTcpDetails(tcpDetails: TcpConnectionInfo) { try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_set_tcp_details(self.uniffiClonePointer(),
-                                                                                 FfiConverterTypeTcpConnectionInfo.lower(tcpDetails), $0)
+    open func setTcpDetails(tcpInfo: TcpConnectionInfo) { try! rustCall {
+        uniffi_intershare_sdk_fn_method_internalnearbyserver_set_tcp_details(self.uniffiClonePointer(),
+                                                                             FfiConverterTypeTcpConnectionInfo.lower(tcpInfo), $0)
     }
     }
 
@@ -1057,14 +1087,14 @@ open class InternalNearbyServer:
         return
             try! await uniffiRustCallAsync(
                 rustFutureFunc: {
-                    uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_share_files(
+                    uniffi_intershare_sdk_fn_method_internalnearbyserver_share_files(
                         self.uniffiClonePointer(),
                         FfiConverterSequenceString.lower(filePaths), FfiConverterBool.lower(allowConvenienceShare), FfiConverterOptionCallbackInterfaceShareProgressDelegate.lower(progressDelegate)
                     )
                 },
-                pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_pointer,
-                completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_pointer,
-                freeFunc: ffi_intershare_sdk_ffi_rust_future_free_pointer,
+                pollFunc: ffi_intershare_sdk_rust_future_poll_pointer,
+                completeFunc: ffi_intershare_sdk_rust_future_complete_pointer,
+                freeFunc: ffi_intershare_sdk_rust_future_free_pointer,
                 liftFunc: FfiConverterTypeShareStore.lift,
                 errorHandler: nil
             )
@@ -1074,14 +1104,14 @@ open class InternalNearbyServer:
         return
             try! await uniffiRustCallAsync(
                 rustFutureFunc: {
-                    uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_share_text(
+                    uniffi_intershare_sdk_fn_method_internalnearbyserver_share_text(
                         self.uniffiClonePointer(),
                         FfiConverterString.lower(text), FfiConverterBool.lower(allowConvenienceShare)
                     )
                 },
-                pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_pointer,
-                completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_pointer,
-                freeFunc: ffi_intershare_sdk_ffi_rust_future_free_pointer,
+                pollFunc: ffi_intershare_sdk_rust_future_poll_pointer,
+                completeFunc: ffi_intershare_sdk_rust_future_complete_pointer,
+                freeFunc: ffi_intershare_sdk_rust_future_free_pointer,
                 liftFunc: FfiConverterTypeShareStore.lift,
                 errorHandler: nil
             )
@@ -1091,13 +1121,13 @@ open class InternalNearbyServer:
         return
             try! await uniffiRustCallAsync(
                 rustFutureFunc: {
-                    uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_start(
+                    uniffi_intershare_sdk_fn_method_internalnearbyserver_start(
                         self.uniffiClonePointer()
                     )
                 },
-                pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_void,
-                completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_void,
-                freeFunc: ffi_intershare_sdk_ffi_rust_future_free_void,
+                pollFunc: ffi_intershare_sdk_rust_future_poll_void,
+                completeFunc: ffi_intershare_sdk_rust_future_complete_void,
+                freeFunc: ffi_intershare_sdk_rust_future_free_void,
                 liftFunc: { $0 },
                 errorHandler: nil
             )
@@ -1107,13 +1137,13 @@ open class InternalNearbyServer:
         return
             try! await uniffiRustCallAsync(
                 rustFutureFunc: {
-                    uniffi_intershare_sdk_ffi_fn_method_internalnearbyserver_stop(
+                    uniffi_intershare_sdk_fn_method_internalnearbyserver_stop(
                         self.uniffiClonePointer()
                     )
                 },
-                pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_void,
-                completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_void,
-                freeFunc: ffi_intershare_sdk_ffi_rust_future_free_void,
+                pollFunc: ffi_intershare_sdk_rust_future_poll_void,
+                completeFunc: ffi_intershare_sdk_rust_future_complete_void,
+                freeFunc: ffi_intershare_sdk_rust_future_free_void,
                 liftFunc: { $0 },
                 errorHandler: nil
             )
@@ -1211,7 +1241,7 @@ open class ShareStore:
         @_documentation(visibility: private)
     #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_intershare_sdk_ffi_fn_clone_sharestore(self.pointer, $0) }
+        return try! rustCall { uniffi_intershare_sdk_fn_clone_sharestore(self.pointer, $0) }
     }
 
     // No primary constructor declared for this class.
@@ -1221,19 +1251,19 @@ open class ShareStore:
             return
         }
 
-        try! rustCall { uniffi_intershare_sdk_ffi_fn_free_sharestore(pointer, $0) }
+        try! rustCall { uniffi_intershare_sdk_fn_free_sharestore(pointer, $0) }
     }
 
     open func generateLink() -> String? {
         return try! FfiConverterOptionString.lift(try! rustCall {
-            uniffi_intershare_sdk_ffi_fn_method_sharestore_generate_link(self.uniffiClonePointer(), $0)
+            uniffi_intershare_sdk_fn_method_sharestore_generate_link(self.uniffiClonePointer(), $0)
         })
     }
 
     open func generateQrCode(darkMode: Bool) -> [UInt8]? {
         return try! FfiConverterOptionSequenceUInt8.lift(try! rustCall {
-            uniffi_intershare_sdk_ffi_fn_method_sharestore_generate_qr_code(self.uniffiClonePointer(),
-                                                                            FfiConverterBool.lower(darkMode), $0)
+            uniffi_intershare_sdk_fn_method_sharestore_generate_qr_code(self.uniffiClonePointer(),
+                                                                        FfiConverterBool.lower(darkMode), $0)
         })
     }
 
@@ -1241,14 +1271,14 @@ open class ShareStore:
         return
             try await uniffiRustCallAsync(
                 rustFutureFunc: {
-                    uniffi_intershare_sdk_ffi_fn_method_sharestore_send_to(
+                    uniffi_intershare_sdk_fn_method_sharestore_send_to(
                         self.uniffiClonePointer(),
                         FfiConverterTypeDevice.lower(receiver), FfiConverterOptionCallbackInterfaceSendProgressDelegate.lower(progressDelegate)
                     )
                 },
-                pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_void,
-                completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_void,
-                freeFunc: ffi_intershare_sdk_ffi_rust_future_free_void,
+                pollFunc: ffi_intershare_sdk_rust_future_poll_void,
+                completeFunc: ffi_intershare_sdk_rust_future_complete_void,
+                freeFunc: ffi_intershare_sdk_rust_future_free_void,
                 liftFunc: { $0 },
                 errorHandler: FfiConverterTypeConnectErrors.lift
             )
@@ -1849,9 +1879,8 @@ public func FfiConverterTypeConnectionMedium_lower(_ value: ConnectionMedium) ->
 extension ConnectionMedium: Equatable, Hashable {}
 
 public enum DiscoverySetupError {
-    case UnableToSetupUdp(message: String)
-
-    case UnableToSetupMdns(message: String)
+    case UnableToSetupUdp
+    case UnableToSetupMdns
 }
 
 #if swift(>=5.8)
@@ -1863,13 +1892,8 @@ public struct FfiConverterTypeDiscoverySetupError: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscoverySetupError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return try .UnableToSetupUdp(
-                message: FfiConverterString.read(from: &buf)
-            )
-
-        case 2: return try .UnableToSetupMdns(
-                message: FfiConverterString.read(from: &buf)
-            )
+        case 1: return .UnableToSetupUdp
+        case 2: return .UnableToSetupMdns
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -1877,9 +1901,10 @@ public struct FfiConverterTypeDiscoverySetupError: FfiConverterRustBuffer {
 
     public static func write(_ value: DiscoverySetupError, into buf: inout [UInt8]) {
         switch value {
-        case .UnableToSetupUdp(_ /* message is ignored*/ ):
+        case .UnableToSetupUdp:
             writeInt(&buf, Int32(1))
-        case .UnableToSetupMdns(_ /* message is ignored*/ ):
+
+        case .UnableToSetupMdns:
             writeInt(&buf, Int32(2))
         }
     }
@@ -2350,7 +2375,7 @@ private enum UniffiCallbackInterfaceBleDiscoveryImplementationDelegate {
 }
 
 private func uniffiCallbackInitBleDiscoveryImplementationDelegate() {
-    uniffi_intershare_sdk_ffi_fn_init_callback_vtable_blediscoveryimplementationdelegate(&UniffiCallbackInterfaceBleDiscoveryImplementationDelegate.vtable)
+    uniffi_intershare_sdk_fn_init_callback_vtable_blediscoveryimplementationdelegate(&UniffiCallbackInterfaceBleDiscoveryImplementationDelegate.vtable)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -2461,7 +2486,7 @@ private enum UniffiCallbackInterfaceBleServerImplementationDelegate {
 }
 
 private func uniffiCallbackInitBleServerImplementationDelegate() {
-    uniffi_intershare_sdk_ffi_fn_init_callback_vtable_bleserverimplementationdelegate(&UniffiCallbackInterfaceBleServerImplementationDelegate.vtable)
+    uniffi_intershare_sdk_fn_init_callback_vtable_bleserverimplementationdelegate(&UniffiCallbackInterfaceBleServerImplementationDelegate.vtable)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -2576,7 +2601,7 @@ private enum UniffiCallbackInterfaceDeviceListUpdateDelegate {
 }
 
 private func uniffiCallbackInitDeviceListUpdateDelegate() {
-    uniffi_intershare_sdk_ffi_fn_init_callback_vtable_devicelistupdatedelegate(&UniffiCallbackInterfaceDeviceListUpdateDelegate.vtable)
+    uniffi_intershare_sdk_fn_init_callback_vtable_devicelistupdatedelegate(&UniffiCallbackInterfaceDeviceListUpdateDelegate.vtable)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -2670,7 +2695,7 @@ private enum UniffiCallbackInterfaceL2CapDelegate {
 }
 
 private func uniffiCallbackInitL2CapDelegate() {
-    uniffi_intershare_sdk_ffi_fn_init_callback_vtable_l2capdelegate(&UniffiCallbackInterfaceL2CapDelegate.vtable)
+    uniffi_intershare_sdk_fn_init_callback_vtable_l2capdelegate(&UniffiCallbackInterfaceL2CapDelegate.vtable)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -2719,9 +2744,9 @@ extension FfiConverterCallbackInterfaceL2CapDelegate: FfiConverter {
 }
 
 public protocol NativeStreamDelegate: AnyObject {
-    func write(data: Data) -> UInt64
-
     func read(bufferLength: UInt64) -> Data
+
+    func write(data: Data) -> UInt64
 
     func flush()
 
@@ -2733,29 +2758,6 @@ private enum UniffiCallbackInterfaceNativeStreamDelegate {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     static var vtable: UniffiVTableCallbackInterfaceNativeStreamDelegate = .init(
-        write: { (
-            uniffiHandle: UInt64,
-            data: RustBuffer,
-            uniffiOutReturn: UnsafeMutablePointer<UInt64>,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
-        ) in
-            let makeCall = {
-                () throws -> UInt64 in
-                guard let uniffiObj = try? FfiConverterCallbackInterfaceNativeStreamDelegate.handleMap.get(handle: uniffiHandle) else {
-                    throw UniffiInternalError.unexpectedStaleHandle
-                }
-                return try uniffiObj.write(
-                    data: FfiConverterData.lift(data)
-                )
-            }
-
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterUInt64.lower($0) }
-            uniffiTraitInterfaceCall(
-                callStatus: uniffiCallStatus,
-                makeCall: makeCall,
-                writeReturn: writeReturn
-            )
-        },
         read: { (
             uniffiHandle: UInt64,
             bufferLength: UInt64,
@@ -2773,6 +2775,29 @@ private enum UniffiCallbackInterfaceNativeStreamDelegate {
             }
 
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterData.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        write: { (
+            uniffiHandle: UInt64,
+            data: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<UInt64>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> UInt64 in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceNativeStreamDelegate.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.write(
+                    data: FfiConverterData.lift(data)
+                )
+            }
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterUInt64.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
                 makeCall: makeCall,
@@ -2831,7 +2856,7 @@ private enum UniffiCallbackInterfaceNativeStreamDelegate {
 }
 
 private func uniffiCallbackInitNativeStreamDelegate() {
-    uniffi_intershare_sdk_ffi_fn_init_callback_vtable_nativestreamdelegate(&UniffiCallbackInterfaceNativeStreamDelegate.vtable)
+    uniffi_intershare_sdk_fn_init_callback_vtable_nativestreamdelegate(&UniffiCallbackInterfaceNativeStreamDelegate.vtable)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -2921,7 +2946,7 @@ private enum UniffiCallbackInterfaceNearbyConnectionDelegate {
 }
 
 private func uniffiCallbackInitNearbyConnectionDelegate() {
-    uniffi_intershare_sdk_ffi_fn_init_callback_vtable_nearbyconnectiondelegate(&UniffiCallbackInterfaceNearbyConnectionDelegate.vtable)
+    uniffi_intershare_sdk_fn_init_callback_vtable_nearbyconnectiondelegate(&UniffiCallbackInterfaceNearbyConnectionDelegate.vtable)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -2937,6 +2962,98 @@ private enum FfiConverterCallbackInterfaceNearbyConnectionDelegate {
 #endif
 extension FfiConverterCallbackInterfaceNearbyConnectionDelegate: FfiConverter {
     typealias SwiftType = NearbyConnectionDelegate
+    typealias FfiType = UInt64
+
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+public protocol NearbyInstantReceiveDelegate: AnyObject {
+    func requestedInstantFileReceive(device: Device, requestId: String) -> Bool
+}
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+private enum UniffiCallbackInterfaceNearbyInstantReceiveDelegate {
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    static var vtable: UniffiVTableCallbackInterfaceNearbyInstantReceiveDelegate = .init(
+        requestedInstantFileReceive: { (
+            uniffiHandle: UInt64,
+            device: RustBuffer,
+            requestId: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<Int8>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Bool in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceNearbyInstantReceiveDelegate.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.requestedInstantFileReceive(
+                    device: FfiConverterTypeDevice.lift(device),
+                    requestId: FfiConverterString.lift(requestId)
+                )
+            }
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) in
+            let result = try? FfiConverterCallbackInterfaceNearbyInstantReceiveDelegate.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface NearbyInstantReceiveDelegate: handle missing in uniffiFree")
+            }
+        }
+    )
+}
+
+private func uniffiCallbackInitNearbyInstantReceiveDelegate() {
+    uniffi_intershare_sdk_fn_init_callback_vtable_nearbyinstantreceivedelegate(&UniffiCallbackInterfaceNearbyInstantReceiveDelegate.vtable)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+private enum FfiConverterCallbackInterfaceNearbyInstantReceiveDelegate {
+    fileprivate static var handleMap = UniffiHandleMap<NearbyInstantReceiveDelegate>()
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceNearbyInstantReceiveDelegate: FfiConverter {
+    typealias SwiftType = NearbyInstantReceiveDelegate
     typealias FfiType = UInt64
 
     #if swift(>=5.8)
@@ -3011,7 +3128,7 @@ private enum UniffiCallbackInterfaceReceiveProgressDelegate {
 }
 
 private func uniffiCallbackInitReceiveProgressDelegate() {
-    uniffi_intershare_sdk_ffi_fn_init_callback_vtable_receiveprogressdelegate(&UniffiCallbackInterfaceReceiveProgressDelegate.vtable)
+    uniffi_intershare_sdk_fn_init_callback_vtable_receiveprogressdelegate(&UniffiCallbackInterfaceReceiveProgressDelegate.vtable)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -3101,7 +3218,7 @@ private enum UniffiCallbackInterfaceSendProgressDelegate {
 }
 
 private func uniffiCallbackInitSendProgressDelegate() {
-    uniffi_intershare_sdk_ffi_fn_init_callback_vtable_sendprogressdelegate(&UniffiCallbackInterfaceSendProgressDelegate.vtable)
+    uniffi_intershare_sdk_fn_init_callback_vtable_sendprogressdelegate(&UniffiCallbackInterfaceSendProgressDelegate.vtable)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -3191,7 +3308,7 @@ private enum UniffiCallbackInterfaceShareProgressDelegate {
 }
 
 private func uniffiCallbackInitShareProgressDelegate() {
-    uniffi_intershare_sdk_ffi_fn_init_callback_vtable_shareprogressdelegate(&UniffiCallbackInterfaceShareProgressDelegate.vtable)
+    uniffi_intershare_sdk_fn_init_callback_vtable_shareprogressdelegate(&UniffiCallbackInterfaceShareProgressDelegate.vtable)
 }
 
 // FfiConverter protocol for callback interfaces
@@ -3603,21 +3720,21 @@ private func uniffiFutureContinuationCallback(handle: UInt64, pollResult: Int8) 
 
 public func getBleDiscoveryCharacteristicUuid() -> String {
     return try! FfiConverterString.lift(try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_func_get_ble_discovery_characteristic_uuid($0
+        uniffi_intershare_sdk_fn_func_get_ble_discovery_characteristic_uuid($0
         )
     })
 }
 
 public func getBleServiceUuid() -> String {
     return try! FfiConverterString.lift(try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_func_get_ble_service_uuid($0
+        uniffi_intershare_sdk_fn_func_get_ble_service_uuid($0
         )
     })
 }
 
 public func getLogFilePathStr() -> String? {
     return try! FfiConverterOptionString.lift(try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_func_get_log_file_path_str($0
+        uniffi_intershare_sdk_fn_func_get_log_file_path_str($0
         )
     })
 }
@@ -3626,11 +3743,11 @@ public func handleIncomingL2capConnection(connectionId: String, nativeStream: Na
     return
         try! await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_intershare_sdk_ffi_fn_func_handle_incoming_l2cap_connection(FfiConverterString.lower(connectionId), FfiConverterCallbackInterfaceNativeStreamDelegate.lower(nativeStream))
+                uniffi_intershare_sdk_fn_func_handle_incoming_l2cap_connection(FfiConverterString.lower(connectionId), FfiConverterCallbackInterfaceNativeStreamDelegate.lower(nativeStream))
             },
-            pollFunc: ffi_intershare_sdk_ffi_rust_future_poll_void,
-            completeFunc: ffi_intershare_sdk_ffi_rust_future_complete_void,
-            freeFunc: ffi_intershare_sdk_ffi_rust_future_free_void,
+            pollFunc: ffi_intershare_sdk_rust_future_poll_void,
+            completeFunc: ffi_intershare_sdk_rust_future_complete_void,
+            freeFunc: ffi_intershare_sdk_rust_future_free_void,
             liftFunc: { $0 },
             errorHandler: nil
         )
@@ -3638,7 +3755,7 @@ public func handleIncomingL2capConnection(connectionId: String, nativeStream: Na
 
 public func isCompatible(device: Device) -> VersionCompatibility {
     return try! FfiConverterTypeVersionCompatibility.lift(try! rustCall {
-        uniffi_intershare_sdk_ffi_fn_func_is_compatible(
+        uniffi_intershare_sdk_fn_func_is_compatible(
             FfiConverterTypeDevice.lower(device), $0
         )
     })
@@ -3656,167 +3773,179 @@ private var initializationResult: InitializationResult = {
     // Get the bindings contract version from our ComponentInterface
     let bindings_contract_version = 26
     // Get the scaffolding contract version by calling the into the dylib
-    let scaffolding_contract_version = ffi_intershare_sdk_ffi_uniffi_contract_version()
+    let scaffolding_contract_version = ffi_intershare_sdk_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_func_get_ble_discovery_characteristic_uuid() != 9198 {
+    if uniffi_intershare_sdk_checksum_func_get_ble_discovery_characteristic_uuid() != 41174 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_func_get_ble_service_uuid() != 25811 {
+    if uniffi_intershare_sdk_checksum_func_get_ble_service_uuid() != 559 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_func_get_log_file_path_str() != 27489 {
+    if uniffi_intershare_sdk_checksum_func_get_log_file_path_str() != 8890 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_func_handle_incoming_l2cap_connection() != 31096 {
+    if uniffi_intershare_sdk_checksum_func_handle_incoming_l2cap_connection() != 31719 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_func_is_compatible() != 44177 {
+    if uniffi_intershare_sdk_checksum_func_is_compatible() != 556 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_connectionrequest_accept() != 5403 {
+    if uniffi_intershare_sdk_checksum_method_sharestore_generate_link() != 64960 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_connectionrequest_cancel() != 18599 {
+    if uniffi_intershare_sdk_checksum_method_sharestore_generate_qr_code() != 5886 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_connectionrequest_decline() != 63855 {
+    if uniffi_intershare_sdk_checksum_method_sharestore_send_to() != 8676 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_connectionrequest_get_clipboard_intent() != 11015 {
+    if uniffi_intershare_sdk_checksum_method_connectionrequest_accept() != 46730 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_connectionrequest_get_file_transfer_intent() != 54780 {
+    if uniffi_intershare_sdk_checksum_method_connectionrequest_cancel() != 56275 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_connectionrequest_get_intent_type() != 56602 {
+    if uniffi_intershare_sdk_checksum_method_connectionrequest_decline() != 58832 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_connectionrequest_get_sender() != 45432 {
+    if uniffi_intershare_sdk_checksum_method_connectionrequest_get_clipboard_intent() != 18496 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_connectionrequest_set_progress_delegate() != 4264 {
+    if uniffi_intershare_sdk_checksum_method_connectionrequest_get_file_transfer_intent() != 5345 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internaldiscovery_add_ble_implementation() != 16831 {
+    if uniffi_intershare_sdk_checksum_method_connectionrequest_get_intent_type() != 2989 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internaldiscovery_get_devices() != 9047 {
+    if uniffi_intershare_sdk_checksum_method_connectionrequest_get_sender() != 48559 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internaldiscovery_parse_discovery_message() != 50781 {
+    if uniffi_intershare_sdk_checksum_method_connectionrequest_set_progress_delegate() != 13934 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internaldiscovery_start() != 1767 {
+    if uniffi_intershare_sdk_checksum_method_connectionrequest_update_progress() != 27929 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internaldiscovery_stop() != 25027 {
+    if uniffi_intershare_sdk_checksum_method_internaldiscovery_add_ble_implementation() != 59819 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_sharestore_generate_link() != 52573 {
+    if uniffi_intershare_sdk_checksum_method_internaldiscovery_add_discovered_device() != 37791 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_sharestore_generate_qr_code() != 50690 {
+    if uniffi_intershare_sdk_checksum_method_internaldiscovery_get_devices() != 48460 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_sharestore_send_to() != 57303 {
+    if uniffi_intershare_sdk_checksum_method_internaldiscovery_parse_discovery_message() != 14241 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_add_ble_implementation() != 45172 {
+    if uniffi_intershare_sdk_checksum_method_internaldiscovery_remove_discovered_device() != 12235 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_add_l2_cap_client() != 46640 {
+    if uniffi_intershare_sdk_checksum_method_internaldiscovery_start() != 23215 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_change_device() != 42219 {
+    if uniffi_intershare_sdk_checksum_method_internaldiscovery_stop() != 40747 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_get_advertisement_data() != 1943 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_add_bluetooth_implementation() != 49906 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_get_current_ip() != 38462 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_add_l2_cap_client() != 5582 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_get_device_name() != 59652 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_change_device() != 58267 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_handle_incoming_connection() != 5301 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_get_advertisement_data() != 38682 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_request_download() != 7440 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_get_current_ip() != 14506 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_restart_server() != 50803 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_get_device_name() != 3575 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_set_ble_connection_details() != 31529 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_handle_incoming_connection() != 3472 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_set_tcp_details() != 19599 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_request_download() != 30179 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_share_files() != 22062 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_restart_server() != 27750 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_share_text() != 11088 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_set_bluetooth_le_details() != 26840 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_start() != 43187 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_set_tcp_details() != 26689 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_internalnearbyserver_stop() != 14889 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_share_files() != 46177 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_constructor_internaldiscovery_new() != 58519 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_share_text() != 58097 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_constructor_internalnearbyserver_new() != 57569 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_start() != 22669 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_blediscoveryimplementationdelegate_start_scanning() != 4072 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_stop() != 61145 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_blediscoveryimplementationdelegate_stop_scanning() != 7259 {
+    if uniffi_intershare_sdk_checksum_constructor_internaldiscovery_new() != 23617 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_bleserverimplementationdelegate_start_server() != 64498 {
+    if uniffi_intershare_sdk_checksum_constructor_internalnearbyserver_new() != 19836 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_bleserverimplementationdelegate_stop_server() != 13872 {
+    if uniffi_intershare_sdk_checksum_method_sendprogressdelegate_progress_changed() != 8737 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_devicelistupdatedelegate_device_added() != 57418 {
+    if uniffi_intershare_sdk_checksum_method_blediscoveryimplementationdelegate_start_scanning() != 21660 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_devicelistupdatedelegate_device_removed() != 17945 {
+    if uniffi_intershare_sdk_checksum_method_blediscoveryimplementationdelegate_stop_scanning() != 45974 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_l2capdelegate_open_l2cap_connection() != 17300 {
+    if uniffi_intershare_sdk_checksum_method_bleserverimplementationdelegate_start_server() != 55538 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_nativestreamdelegate_write() != 22335 {
+    if uniffi_intershare_sdk_checksum_method_bleserverimplementationdelegate_stop_server() != 27900 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_nativestreamdelegate_read() != 16288 {
+    if uniffi_intershare_sdk_checksum_method_devicelistupdatedelegate_device_added() != 23168 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_nativestreamdelegate_flush() != 51105 {
+    if uniffi_intershare_sdk_checksum_method_devicelistupdatedelegate_device_removed() != 11370 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_nativestreamdelegate_disconnect() != 29432 {
+    if uniffi_intershare_sdk_checksum_method_l2capdelegate_open_l2cap_connection() != 35884 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_nearbyconnectiondelegate_received_connection_request() != 25692 {
+    if uniffi_intershare_sdk_checksum_method_nativestreamdelegate_read() != 15627 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_receiveprogressdelegate_progress_changed() != 50220 {
+    if uniffi_intershare_sdk_checksum_method_nativestreamdelegate_write() != 32491 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_sendprogressdelegate_progress_changed() != 50088 {
+    if uniffi_intershare_sdk_checksum_method_nativestreamdelegate_flush() != 65506 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_ffi_checksum_method_shareprogressdelegate_progress_changed() != 47709 {
+    if uniffi_intershare_sdk_checksum_method_nativestreamdelegate_disconnect() != 27809 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_intershare_sdk_checksum_method_nearbyconnectiondelegate_received_connection_request() != 38378 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_intershare_sdk_checksum_method_nearbyinstantreceivedelegate_requested_instant_file_receive() != 55638 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_intershare_sdk_checksum_method_receiveprogressdelegate_progress_changed() != 42587 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_intershare_sdk_checksum_method_shareprogressdelegate_progress_changed() != 32927 {
         return InitializationResult.apiChecksumMismatch
     }
 
@@ -3826,6 +3955,7 @@ private var initializationResult: InitializationResult = {
     uniffiCallbackInitL2CapDelegate()
     uniffiCallbackInitNativeStreamDelegate()
     uniffiCallbackInitNearbyConnectionDelegate()
+    uniffiCallbackInitNearbyInstantReceiveDelegate()
     uniffiCallbackInitReceiveProgressDelegate()
     uniffiCallbackInitSendProgressDelegate()
     uniffiCallbackInitShareProgressDelegate()

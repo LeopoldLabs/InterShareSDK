@@ -1,10 +1,10 @@
 [bindings.kotlin]
 package_name = "com.julian_baumann.intershare_sdk"
-cdylib_name = "intershare_sdk_ffi"
+cdylib_name = "intershare_sdk"
 android = true
 android_cleaner = true
 
 [bindings.csharp]
-cdylib_name = "intershare_sdk_ffi"
+cdylib_name = "intershare_sdk"
 namespace = "InterShareSdk"
 access_modifier = "public"

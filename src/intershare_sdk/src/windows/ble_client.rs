@@ -20,10 +20,10 @@ use windows::{
 use tokio::runtime::Handle;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 use crate::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
-use crate::discovery::Discovery;
+use crate::discovery::InternalDiscovery;
 
 
-impl Discovery {
+impl InternalDiscovery {
     pub(crate) fn windows_start_scanning(self: Arc<Self>) {
         let scanning = self.scanning.clone();
         let self_copy = self.clone();
@@ -56,7 +56,7 @@ impl Discovery {
 
 }
 
-impl Discovery {
+impl InternalDiscovery {
     async fn scan_and_connect(
         internal_discovery: Arc<Self>,
         scanning: Arc<AtomicBool>,

@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 
 use crate::communication::initiate_receiver_communication;
 use crate::connection_request::ConnectionRequest;
-use crate::nearby_server::{NearbyConnectionDelegate, NearbyServer};
+use crate::nearby_server::{NearbyConnectionDelegate, InternalNearbyServer};
 use crate::stream::Close;
 
 pub struct TcpServer {
@@ -23,7 +23,7 @@ pub struct TcpServer {
     running: Arc<AtomicBool>
 }
 
-impl NearbyServer {
+impl InternalNearbyServer {
     pub(crate) async fn new_tcp_server(&self, delegate: Arc<RwLock<Box<dyn NearbyConnectionDelegate>>>, file_storage: String) -> Result<TcpServer, io::Error> {
         let addresses = [
             SocketAddr::from(([0, 0, 0, 0], 80)),
@@ -85,7 +85,7 @@ impl NearbyServer {
                         file_storage.clone()
                     );
 
-                    delegate.blocking_read().received_connection_request(Arc::new(connection_request));
+                    delegate.read().await.received_connection_request(Arc::new(connection_request));
                 } else {
                     // NearbyServer::received_convenience_download_request(transfer_request, current_share_store.clone()).await;
                 }

@@ -2,8 +2,6 @@
 resolver = "2"
 
 members = [
-#    "src/windows",
     "src/intershare_sdk",
-#    "src/intershare_sdk_ffi",
     "src/protocol"
 ]

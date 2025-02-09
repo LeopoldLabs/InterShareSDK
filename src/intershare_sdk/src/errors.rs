@@ -2,7 +2,7 @@ use std::io;
 use std::string::FromUtf8Error;
 use thiserror::Error;
 
-#[derive(Error, Debug, uniffi::Error)]
+#[derive(Error, Debug)]
 pub enum ConnectErrors {
     #[error("Invalid protocol version. Receiver device has a unsupported version.")]
     InvalidProtocolVersion,

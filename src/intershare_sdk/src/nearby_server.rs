@@ -1,3 +1,4 @@
+use crate::stream::NativeStreamDelegate;
 use std::fmt::Debug;
 use std::io::{Read, Write};
 use std::sync::Arc;
@@ -7,10 +8,10 @@ use log::{error, info};
 use prost_stream::Stream;
 use protocol::communication::request::RequestTypes;
 use protocol::communication::Request;
-use protocol::discovery::{BluetoothLeConnectionInfo, Device, DeviceConnectionInfo, TcpConnectionInfo};
+use protocol::discovery::{BluetoothLeConnectionInfo, Device, DeviceConnectionInfo, DeviceDiscoveryMessage, TcpConnectionInfo};
 use tokio::sync::RwLock;
 use url::Url;
-
+use protocol::discovery::device_discovery_message::Content;
 use crate::communication::initiate_receiver_communication;
 use crate::connection::Connection;
 use crate::connection_request::ConnectionRequest;
@@ -20,6 +21,7 @@ use crate::{create_tmp_file, init_logger, PROTOCOL_VERSION};
 use crate::stream::Close;
 use crate::transmission::tcp::TcpServer;
 use crate::zip::zip_files;
+use protocol::prost::Message;
 
 #[cfg(target_os="windows")]
 use windows::{Devices::Bluetooth::GenericAttributeProfile::*};
@@ -53,7 +55,7 @@ pub trait ShareProgressDelegate: Send + Sync + Debug {
     fn progress_changed(&self, progress: ShareProgressState);
 }
 
-// #[uniffi::export(callback_interface)]
+#[uniffi::export(callback_interface)]
 pub trait NearbyConnectionDelegate: Send + Sync + Debug {
     fn received_connection_request(&self, request: Arc<ConnectionRequest>);
 }
@@ -69,8 +71,8 @@ pub struct CurrentShareStore {
     pub clipboard: Option<String>
 }
 
-// #[derive(uniffi::Object)]
-pub struct NearbyServer {
+#[derive(uniffi::Object)]
+pub struct InternalNearbyServer {
     pub(crate) tcp_server: RwLock<Option<TcpServer>>,
     ble_server_implementation: RwLock<Option<Box<dyn BleServerImplementationDelegate>>>,
     ble_l2_cap_client: Arc<RwLock<Option<Box<dyn L2CapDelegate>>>>,
@@ -79,15 +81,15 @@ pub struct NearbyServer {
     pub device_connection_info: RwLock<DeviceConnectionInfo>,
     nearby_connection_delegate: Option<Arc<RwLock<Box<dyn NearbyConnectionDelegate>>>>,
     pub(crate) current_share_store: Arc<RwLock<Option<Arc<ShareStore>>>>,
-    
+
     #[cfg(target_os="windows")]
     pub(crate) gatt_service_provider: std::sync::RwLock<Option<GattServiceProvider>>,
-    
+
     requested_download_id: Arc<RwLock<Option<String>>>
 }
 
-// #[uniffi::export(async_runtime = "tokio")]
-impl NearbyServer {
+#[uniffi::export(async_runtime = "tokio")]
+impl InternalNearbyServer {
     #[uniffi::constructor]
     pub fn new(my_device: Device, file_storage: String, delegate: Option<Box<dyn NearbyConnectionDelegate>>) -> Self {
         init_logger();
@@ -118,7 +120,7 @@ impl NearbyServer {
 
             #[cfg(target_os="windows")]
             gatt_service_provider: std::sync::RwLock::new(None),
-            
+
             requested_download_id: Arc::new(RwLock::new(None))
         };
     }
@@ -129,6 +131,33 @@ impl NearbyServer {
 
     pub fn add_bluetooth_implementation(&self, implementation: Box<dyn BleServerImplementationDelegate>) {
         *self.ble_server_implementation.blocking_write() = Some(implementation)
+    }
+
+    pub async fn get_advertisement_data(&self) -> Vec<u8> {
+        if *self.advertise.read().await {
+            return DeviceDiscoveryMessage {
+                content: Some(
+                    Content::DeviceConnectionInfo(
+                        self.device_connection_info.read().await.clone()
+                    )
+                ),
+            }.encode_length_delimited_to_vec();
+
+            // self.mut_variables.write().await.discovery_message = message;
+        } else {
+            // return DeviceDiscoveryMessage {
+            //     content: Some(
+            //         Content::OfflineDeviceId(
+            //             self.handler.variables
+            //                 .read()
+            //                 .await
+            //                 .device_connection_info.device?.id.clone()
+            //         )
+            //     ),
+            // }.encode_length_delimited_to_vec();
+        }
+
+        return vec![];
     }
 
     pub fn change_device(&self, new_device: Device) {
@@ -311,6 +340,10 @@ impl NearbyServer {
         return share_store;
     }
 
+    pub fn handle_incoming_connection(&self, native_stream_handle: Box<dyn NativeStreamDelegate>) {
+        self.handle_incoming_connection_generic(native_stream_handle);
+    }
+
     pub async fn share_files(&self, file_paths: Vec<String>, allow_convenience_share: bool, progress_delegate: Option<Box<dyn ShareProgressDelegate>>) -> Arc<ShareStore> {
         if let Some(progress_delegate) = &progress_delegate {
             progress_delegate.progress_changed(ShareProgressState::Compressing { progress: 0.0 });
@@ -338,7 +371,46 @@ impl NearbyServer {
         return share_store
     }
 
-    fn handle_incoming_connection<T>(&self, native_stream_handle: T) where T: Read + Write + Send + Close + 'static {
+    // pub(crate) async fn received_convenience_download_request(request: Request, current_share_store: Arc<RwLock<Option<Arc<ShareStore>>>>) {
+    //     let Some(current_share_store) = &*current_share_store.read().await else {
+    //         return;
+    //     };
+    //
+    //     if request.share_id != Some(current_share_store.request_id.clone()) {
+    //         warn!("Received convenience download request, but wrong with a wrong ID. Expected: {}, but received {:?}", current_share_store.request_id.clone(), request.share_id());
+    //         return;
+    //     }
+    //
+    //     let Some(device) = request.device else {
+    //         return;
+    //     };
+    //
+    //     let _ = current_share_store.send_to(device, None).await;
+    // }
+
+    pub async fn stop(&self) {
+        *self.advertise.write().await = false;
+        self.stop_tcp_server().await;
+
+        *self.tcp_server.write().await = None;
+
+        #[cfg(target_os="windows")]
+        self.stop_windows_server();
+
+        #[cfg(not(target_os="windows"))]
+        if let Some(ble_advertisement_implementation) = &*self.ble_server_implementation.blocking_read() {
+            ble_advertisement_implementation.stop_server();
+        }
+    }
+
+    pub fn get_device_name(&self) -> Option<String> {
+        let device = self.device_connection_info.blocking_read().device.clone();
+        return Some(device?.name)
+    }
+}
+
+impl InternalNearbyServer {
+    fn handle_incoming_connection_generic<T>(&self, native_stream_handle: T) where T: Read + Write + Send + Close + 'static {
         let delegate = self.nearby_connection_delegate.clone();
 
         let Some(delegate) = delegate else {
@@ -378,42 +450,5 @@ impl NearbyServer {
                 // NearbyServer::received_convenience_download_request(request, current_share_store).await;
             }
         });
-    }
-
-    // pub(crate) async fn received_convenience_download_request(request: Request, current_share_store: Arc<RwLock<Option<Arc<ShareStore>>>>) {
-    //     let Some(current_share_store) = &*current_share_store.read().await else {
-    //         return;
-    //     };
-    // 
-    //     if request.share_id != Some(current_share_store.request_id.clone()) {
-    //         warn!("Received convenience download request, but wrong with a wrong ID. Expected: {}, but received {:?}", current_share_store.request_id.clone(), request.share_id());
-    //         return;
-    //     }
-    // 
-    //     let Some(device) = request.device else {
-    //         return;
-    //     };
-    // 
-    //     let _ = current_share_store.send_to(device, None).await;
-    // }
-
-    pub async fn stop(&self) {
-        *self.advertise.write().await = false;
-        self.stop_tcp_server().await;
-
-        *self.tcp_server.write().await = None;
-
-        #[cfg(target_os="windows")]
-        self.stop_windows_server();
-        
-        #[cfg(not(target_os="windows"))]
-        if let Some(ble_advertisement_implementation) = &*self.ble_server_implementation.blocking_read() {
-            ble_advertisement_implementation.stop_server();
-        }
-    }
-
-    pub fn get_device_name(&self) -> Option<String> {
-        let device = self.device_connection_info.blocking_read().device.clone();
-        return Some(device?.name)
     }
 }

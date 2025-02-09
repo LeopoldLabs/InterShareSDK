@@ -1,14 +1,16 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::sync::{Arc, Mutex, OnceLock, RwLock};
-use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, OnceLock, RwLock};
 use log::{info, warn};
 use protocol::discovery;
 use protocol::discovery::{DeviceConnectionInfo, DeviceDiscoveryMessage, Device};
 use protocol::discovery::device_discovery_message::Content;
 use protocol::prost::Message;
+use crate::encryption::generate_secure_base64_token;
 use crate::errors::DiscoverySetupError;
 use crate::init_logger;
+#[cfg(target_os="windows")]
+use std::sync::atomic::AtomicBool;
 
 #[uniffi::export(callback_interface)]
 pub trait BleDiscoveryImplementationDelegate: Send + Sync + Debug {
@@ -17,12 +19,13 @@ pub trait BleDiscoveryImplementationDelegate: Send + Sync + Debug {
 }
 
 #[uniffi::export(callback_interface)]
-pub trait DiscoveryDelegate: Send + Sync + Debug {
+pub trait DeviceListUpdateDelegate: Send + Sync + Debug {
     fn device_added(&self, value: discovery::Device);
     fn device_removed(&self, device_id: String);
 }
 
 static DISCOVERED_DEVICES: OnceLock<RwLock<HashMap<String, DeviceConnectionInfo>>> = OnceLock::new();
+static DELEGATES: OnceLock<RwLock<HashMap<String, Arc<Box<dyn DeviceListUpdateDelegate>>>>> = OnceLock::new();
 
 pub fn get_connection_details(device: Device) -> Option<DeviceConnectionInfo> {
     if DISCOVERED_DEVICES.get().unwrap().read().unwrap().contains_key(&device.id) {
@@ -33,41 +36,47 @@ pub fn get_connection_details(device: Device) -> Option<DeviceConnectionInfo> {
 }
 
 #[derive(uniffi::Object)]
-pub struct Discovery {
+pub struct InternalDiscovery {
     pub ble_discovery_implementation: tokio::sync::RwLock<Option<Box<dyn BleDiscoveryImplementationDelegate>>>,
+    current_delegate_id: String,
 
     #[cfg(target_os="windows")]
-    pub(crate) scanning: Arc<AtomicBool>,
-    
-    discovery_delegate: Option<Arc<Mutex<Box<dyn DiscoveryDelegate>>>>
+    pub(crate) scanning: Arc<AtomicBool>
 }
 
-impl Debug for Discovery {
+impl Debug for InternalDiscovery {
     fn fmt(&self, _f: &mut Formatter<'_>) -> std::fmt::Result {
         Ok(())
     }
 }
 
-#[uniffi::export(async_runtime = "tokio")]
-impl Discovery {
+#[uniffi::export]
+impl InternalDiscovery {
     #[uniffi::constructor]
-    pub fn new(delegate: Option<Box<dyn DiscoveryDelegate>>) -> Result<Arc<Self>, DiscoverySetupError> {
+    pub fn new(delegate: Option<Box<dyn DeviceListUpdateDelegate>>) -> Result<Arc<Self>, DiscoverySetupError> {
         init_logger();
 
         DISCOVERED_DEVICES.get_or_init(|| RwLock::new(HashMap::new()));
+        DELEGATES.get_or_init(|| RwLock::new(HashMap::new()));
 
         let callback_arc = match delegate {
-            Some(callback) => Some(Arc::new(Mutex::new(callback))),
+            Some(callback) => Some(Arc::new(callback)),
             None => None
+        };
+
+        let delegate_id = generate_secure_base64_token(4);
+
+        if let Some(delegate) = &callback_arc {
+            info!("Adding delegate: {:?}", delegate_id);
+            DELEGATES.get().unwrap().write().unwrap().insert(delegate_id.clone(), delegate.clone());
         };
 
         return Ok(Arc::new(Self {
             ble_discovery_implementation: tokio::sync::RwLock::new(None),
-            
+            current_delegate_id: delegate_id,
+
             #[cfg(target_os="windows")]
-            scanning: Arc::new(AtomicBool::new(false)),
-            
-            discovery_delegate: callback_arc
+            scanning: Arc::new(AtomicBool::new(false))
         }));
     }
 
@@ -85,25 +94,27 @@ impl Discovery {
         *self.ble_discovery_implementation.blocking_write() = Some(implementation)
     }
 
-    pub async fn start(self: Arc<Self>) {
+    pub fn start(self: Arc<Self>) {
         DISCOVERED_DEVICES.get().unwrap().write().unwrap().clear();
 
         #[cfg(target_os="windows")]
         self.windows_start_scanning();
 
         #[cfg(not(target_os="windows"))]
-        if let Some(ble_discovery_implementation) = &*self.ble_discovery_implementation.read().await {
+        if let Some(ble_discovery_implementation) = &*self.ble_discovery_implementation.blocking_read() {
             ble_discovery_implementation.start_scanning();
         }
     }
 
-    pub async fn stop(self: Arc<Self>) {
-
+    pub fn stop(self: Arc<Self>) {
         #[cfg(target_os="windows")]
         self.windows_stop_scanning();
 
+        info!("Removing delegate: {:?}", self.current_delegate_id);
+        DELEGATES.get().unwrap().write().expect("Failed to read delegates").remove(&self.current_delegate_id);
+
         #[cfg(not(target_os="windows"))]
-        if let Some(ble_discovery_implementation) = &*self.ble_discovery_implementation.read().await {
+        if let Some(ble_discovery_implementation) = &*self.ble_discovery_implementation.blocking_read() {
             ble_discovery_implementation.stop_scanning();
         }
     }
@@ -156,14 +167,25 @@ impl Discovery {
     }
 
     fn add_discovered_device(self: Arc<Self>, device: Device) {
-        if let Some(discovery_delegate) = &self.discovery_delegate {
-            discovery_delegate.lock().expect("Failed to lock discovery_delegate").device_added(device);
+        let delegates = DELEGATES.get().unwrap().read().expect("Failed to read delegates");
+
+        for values in delegates.values() {
+            values.device_added(device.clone());
         }
+
+        // if let Some(discovery_delegate) = &self.discovery_delegate {
+        //     discovery_delegate.read().expect("Failed to lock discovery_delegate").device_added(device);
+        // }
     }
 
     fn remove_discovered_device(self: Arc<Self>, device_id: String) {
-        if let Some(discovery_delegate) = &self.discovery_delegate {
-            discovery_delegate.lock().expect("Failed to lock discovery_delegate").device_removed(device_id);
+        // if let Some(discovery_delegate) = &self.discovery_delegate {
+        //     discovery_delegate.read().expect("Failed to lock discovery_delegate").device_removed(device_id);
+        // }
+        let delegates = DELEGATES.get().unwrap().read().expect("Failed to read delegates");
+
+        for values in delegates.values() {
+            values.device_removed(device_id.clone());
         }
     }
 }

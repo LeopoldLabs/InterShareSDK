@@ -8,9 +8,9 @@ use protocol::discovery::device_discovery_message::Content;
 use protocol::discovery::DeviceDiscoveryMessage;
 use protocol::prost::Message;
 use crate::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
-use crate::nearby_server::NearbyServer;
+use crate::nearby_server::InternalNearbyServer;
 
-impl NearbyServer {
+impl InternalNearbyServer {
     pub(crate) async fn setup_gatt_server(&self) -> WinResult<GattServiceProvider> {
         let service_uuid = GUID::from(BLE_SERVICE_UUID);
 

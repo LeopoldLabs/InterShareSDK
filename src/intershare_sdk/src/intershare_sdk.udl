@@ -33,35 +33,50 @@ dictionary ClipboardTransferIntent {
     string clipboard_content;
 };
 
+[Error]
+interface ConnectErrors {
+    InvalidProtocolVersion();
+    Unreachable();
+    NoTextProvided();
+    NoFilesProvided();
+    FailedToGetConnectionDetails();
+    Declined();
+    FailedToGetTcpDetails();
+    FailedToGetSocketAddress();
+    FailedToOpenTcpStream(string error);
+    FailedToEncryptStream(string error);
+    FailedToDetermineFileSize(string error);
+    FailedToGetTransferRequestResponse(string error);
+    FailedToGetBleDetails();
+    InternalBleHandlerNotAvailable();
+    FailedToEstablishBleConnection();
+};
+
+interface ShareStore {
+    [Throws=ConnectErrors, Async]
+    void send_to(Device receiver, SendProgressDelegate? progress_delegate);
+
+    string? generate_link();
+    sequence<u8>? generate_qr_code(boolean dark_mode);
+};
+
+enum ConnectionMedium {
+    "BLE",
+    "WiFi"
+};
+
 [Enum]
-interface ReceiveProgressState {
+interface SendProgressState {
     Unknown();
-    Handshake();
-    Receiving(double progress);
-    Extracting();
+    Connecting();
+    Requesting();
+    ConnectionMediumUpdate(ConnectionMedium medium);
+    Transferring(double progress);
     Cancelled();
     Finished();
+    Declined();
 };
 
-callback interface ReceiveProgressDelegate {
-    void progress_changed(ReceiveProgressState progress);
-};
-
-interface ConnectionRequest {
-    Device get_sender();
-    ConnectionIntentType get_intent_type();
-    FileTransferIntent? get_file_transfer_intent();
-    ClipboardTransferIntent? get_clipboard_intent();
-    void set_progress_delegate(ReceiveProgressDelegate delegate);
-    void cancel();
-    sequence<string>? accept();
-    void decline();
-};
-
-callback interface NearbyConnectionDelegate {
-    void received_connection_request(ConnectionRequest request);
-};
-        
-interface NearbyServer {
-    constructor(Device my_device, string file_storage, NearbyConnectionDelegate? delegate);
+callback interface SendProgressDelegate {
+    void progress_changed(SendProgressState progress);
 };

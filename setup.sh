@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 function setupApple() {
     echo "Setting up iOS and macOS targets\n"
