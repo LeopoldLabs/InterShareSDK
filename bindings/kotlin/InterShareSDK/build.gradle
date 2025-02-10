@@ -36,7 +36,7 @@ android {
         def t = tasks.register("generate${variant.name.capitalize()}UniFFIBindings", Exec) {
             workingDir "${project.projectDir}"
             // Runs the bindings generation, note that you must have uniffi-bindgen installed and in your PATH environment variable
-            commandLine 'cargo', 'run', '--bin', 'uniffi-bindgen', 'generate', '--library', '../../../target/aarch64-linux-android/release/libintershare_sdk_ffi.so', '--config', '../../../src/intershare_sdk_ffi/uniffi.toml', '--language', 'kotlin', '--out-dir', "${buildDir}/generated/source/uniffi/${variant.name}/java"
+            commandLine 'cargo', 'run', '--bin', 'uniffi-bindgen', 'generate', '--library', '../../../target/aarch64-linux-android/release/libintershare_sdk.so', '--config', '../../../src/intershare_sdk/uniffi.toml', '--language', 'kotlin', '--out-dir', "${buildDir}/generated/source/uniffi/${variant.name}/java"
         }
 
         variant.javaCompileProvider.get().dependsOn(t)
@@ -81,7 +81,7 @@ publishing {
 
 cargo {
     module  = "../../../"       // Or whatever directory contains your Cargo.toml
-    libname = "intershare_sdk_ffi"          // Or whatever matches Cargo.toml's [package] name.
+    libname = "intershare_sdk" // Or whatever matches Cargo.toml's [package] name.
     targets = ["arm", "x86_64", "arm64"]  // See bellow for a longer list of options
     apiLevel = 26
     profile = "release"

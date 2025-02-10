@@ -3,9 +3,12 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use log::{error, info};
 
+use walkdir::WalkDir;
 use zip::{ZipArchive, ZipWriter};
 use zip::write::SimpleFileOptions;
 
+use crate::convert_os_str;
+use crate::nearby_server::{ShareProgressDelegate, ShareProgressState};
 
 fn normalize_path(path: &Path) -> String {
     // Convert the path to a string using to_string_lossy()
@@ -14,7 +17,83 @@ fn normalize_path(path: &Path) -> String {
     path_str.replace(std::path::MAIN_SEPARATOR, "/")
 }
 
-pub fn zip_directory(zip: &mut ZipWriter<File>, base_dir: &Path, current_dir: &Path, prefix: Option<&str>) {
+pub struct CompressionProgress<'a> {
+    pub total_file_count: usize,
+    pub finished_files: usize,
+    progress_delegate: &'a Box<dyn ShareProgressDelegate>
+}
+
+impl<'a> CompressionProgress<'a> {
+    pub fn new(total_file_count: usize, finished_files: usize, progress_delegate: &'a Box<dyn ShareProgressDelegate>) -> Self {
+        Self {
+            total_file_count,
+            finished_files,
+            progress_delegate
+        }
+    }
+
+    pub fn advance(&mut self) {
+        self.finished_files += 1;
+        let progress = self.finished_files as f64 / self.total_file_count as f64;
+        info!("Progress: {:?}", progress);
+        self.progress_delegate.progress_changed(ShareProgressState::Compressing { progress });
+    }
+}
+
+fn get_file_count(file_paths: &Vec<String>) -> usize {
+    let mut count: usize = 0;
+
+    for path in file_paths {
+        count += WalkDir::new(path)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_type().is_file())
+            .count();
+    }
+
+    return count;
+}
+
+pub fn zip_files(tmp_file: File, file_paths: &Vec<String>, progress_delegate: &Option<Box<dyn ShareProgressDelegate>>) -> File {
+    let mut zip = ZipWriter::new(tmp_file);
+
+    let mut progress = if let Some(progress_delegate) = progress_delegate {
+        let total_file_count: usize = get_file_count(&file_paths);
+        Some(CompressionProgress::new(total_file_count, 0, progress_delegate))
+    } else {
+        None
+    };
+
+    // if let Some(progress) = &mut progress {
+    //     progress.advance();
+    // }
+
+    for file_path in file_paths {
+        let file = Path::new(file_path);
+
+        if file.is_dir() {
+            let prefix = file.file_name().unwrap().to_string_lossy().to_string();
+            zip_directory(&mut zip, file, file, Some(&prefix), &mut progress);
+        } else {
+            info!("Compressing file: {:?}", file);
+            zip.start_file(convert_os_str(file.file_name().unwrap()), SimpleFileOptions::default())
+                .unwrap();
+
+            let mut file = File::open(file_path).unwrap();
+            let _ = std::io::copy(&mut file, &mut zip);
+
+            if let Some(progress) = &mut progress {
+                progress.advance();
+            }
+        }
+    }
+
+    info!("Finished compressing.");
+
+    return zip.finish().expect("Failed to finish the ZIP");
+}
+
+pub fn zip_directory(zip: &mut ZipWriter<File>, base_dir: &Path, current_dir: &Path, prefix: Option<&str>, progress_delegate: &mut Option<CompressionProgress>) {
     // Calculate the relative path based on the base directory
     let relative_path = current_dir.strip_prefix(base_dir).unwrap_or(current_dir);
     let relative_path_str = if let Some(prefix) = prefix {
@@ -45,7 +124,7 @@ pub fn zip_directory(zip: &mut ZipWriter<File>, base_dir: &Path, current_dir: &P
 
         if entry_path.is_dir() {
             // Recursively zip subdirectories
-            zip_directory(zip, base_dir, &entry_path, prefix);
+            zip_directory(zip, base_dir, &entry_path, prefix, progress_delegate);
         } else {
             // Get the relative file path and normalize it
             let file_name = entry_path.strip_prefix(base_dir).unwrap_or(&entry_path);
@@ -74,6 +153,10 @@ pub fn zip_directory(zip: &mut ZipWriter<File>, base_dir: &Path, current_dir: &P
 
             if let Err(error) = std::io::copy(&mut file, zip) {
                 error!("Failed to copy file {:?} to ZIP: {:?}", entry_path, error);
+            }
+
+            if let Some(progress) = progress_delegate {
+                progress.advance();
             }
         }
     }

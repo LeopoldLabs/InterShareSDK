@@ -8,6 +8,9 @@
       <sourceFolder url="file://$MODULE_DIR$/src/protocol/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/intershare_windows/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/intershare_windows/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/src/common/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/windows/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/windows/tests" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/src/intershare_windows/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>

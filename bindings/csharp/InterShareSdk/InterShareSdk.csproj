@@ -9,13 +9,13 @@
 
   <ItemGroup>
     <None Condition="$([MSBuild]::IsOsPlatform('Windows'))"
-          Include="../../../src/intershare_windows/target/x86_64-pc-windows-msvc/release/intershare_sdk_ffi.dll"
+          Include="../../../src/intershare_windows/target/x86_64-pc-windows-msvc/release/intershare_sdk.dll"
           Pack="true"
           PackagePath="runtimes/win-x64/native/"
           CopyToOutputDirectory="PreserveNewest" />
 
     <None Condition="$([MSBuild]::IsOsPlatform('Windows'))"
-          Include="../../../src/intershare_windows/target/aarch64-pc-windows-msvc/release/intershare_sdk_ffi.dll"
+          Include="../../../src/intershare_windows/target/aarch64-pc-windows-msvc/release/intershare_sdk.dll"
           Pack="true"
           PackagePath="runtimes/win-arm64/native/"
           CopyToOutputDirectory="PreserveNewest" />

@@ -27,6 +27,10 @@ public class Discovery {
         internalHandler.start()
     }
     
+    public func getDevices() -> [Device] {
+        return internalHandler.getDevices()
+    }
+    
     public func stopScan() throws {
         try bleImplementation.ensureValidState()
         

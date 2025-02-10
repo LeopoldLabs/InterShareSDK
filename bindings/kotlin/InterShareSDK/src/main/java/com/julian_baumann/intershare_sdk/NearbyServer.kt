@@ -22,8 +22,7 @@ class NearbyServer(context: Context, myDevice: Device, delegate: NearbyConnectio
     private val internal: InternalNearbyServer = InternalNearbyServer(
         myDevice,
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath,
-        delegate,
-        context.cacheDir.absolutePath
+        delegate
     )
 
     private val internalBleImplementation = BLEPeripheralManager(context, internal, bluetoothManager)
@@ -92,7 +91,9 @@ class NearbyServer(context: Context, myDevice: Device, delegate: NearbyConnectio
     }
 
     init {
-        internal.addBleImplementation(internalBleImplementation)
+        setTmpDir(context.cacheDir.absolutePath)
+        
+        internal.addBluetoothImplementation(internalBleImplementation)
         internal.addL2CapClient(internalL2CapClient)
 
         val request = NetworkRequest.Builder().build()
@@ -108,8 +109,16 @@ class NearbyServer(context: Context, myDevice: Device, delegate: NearbyConnectio
         internal.changeDevice(newDevice)
     }
 
-    suspend fun sendFiles(urls: List<String>, to: Device, progressDelegate: SendProgressDelegate?) {
-        internal.sendFiles(to, urls, progressDelegate)
+    suspend fun shareFiles(urls: List<String>, allowConvenienceDownload: Boolean, progressDelegate: ShareProgressDelegate?): ShareStore {
+        return internal.shareFiles(urls, allowConvenienceDownload, progressDelegate)
+    }
+
+    suspend fun shareText(text: String, allowConvenienceDownload: Boolean): ShareStore {
+        return internal.shareText(text, allowConvenienceDownload)
+    }
+
+    suspend fun requestDownload(link: String) {
+        return internal.requestDownload(link)
     }
 
     suspend fun stop() {

@@ -65,10 +65,10 @@ public class NearbyServer {
     public var state: BluetoothState { get { bleServer.state } }
 
     public init(myDevice: Device, storage: String, delegate: NearbyServerDelegate) {
-        internalHandler = InternalNearbyServer(myDevice: myDevice, fileStorage: storage, delegate: delegate, tmpDir: nil)
+        internalHandler = InternalNearbyServer(myDevice: myDevice, fileStorage: storage, delegate: delegate)
         bleServer = BLEPeripheralManager(handler: internalHandler, delegate: delegate)
 
-        internalHandler.addBleImplementation(bleImplementation: bleServer)
+        internalHandler.addBluetoothImplementation(implementation: bleServer)
         internalHandler.addL2CapClient(delegate: L2CAPClient(internalHandler: internalHandler))
 
         lastKnownIp = internalHandler.getCurrentIp()
@@ -109,14 +109,18 @@ public class NearbyServer {
 
     @available(macOS 13.0, *)
     @available(iOS 14.0, *)
-    public func send(urls: [String], to device: Device, progress: SendProgressDelegate?) async throws {
-        try await internalHandler.sendFiles(receiver: device, filePaths: urls, progressDelegate: progress)
+    public func share(urls: [String], allowConvenienceShare: Bool = true, progress: ShareProgressDelegate?) async -> ShareStore {
+        return await internalHandler.shareFiles(filePaths: urls, allowConvenienceShare: allowConvenienceShare, progressDelegate: progress)
+    }
+    
+    public func requestDownload(link: String) async throws {
+        try await internalHandler.requestDownload(link: link)
     }
 
-    public func stop() throws {
+    public func stop() async throws {
         try bleServer.ensureValidState()
 
-        internalHandler.stop()
+        await internalHandler.stop()
         serverRunning = false
     }
 }

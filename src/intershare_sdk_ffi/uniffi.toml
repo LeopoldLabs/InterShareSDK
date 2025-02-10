@@ -1,5 +1,0 @@
-[bindings.kotlin]
-package_name = "com.julian_baumann.intershare_sdk"
-cdylib_name = "intershare_sdk_ffi"
-android = true
-android_cleaner = true

@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::io::{Read, Write};
+use log::info;
 use prost_stream::Stream;
 use rand_core::OsRng;
 use x25519_dalek::{EphemeralSecret, PublicKey};
@@ -8,12 +9,14 @@ use crate::encryption::generate_iv;
 use crate::encryption::EncryptedStream;
 
 pub async fn initiate_sender_communication<T>(mut stream: T) -> Result<EncryptedStream<T>, Box<dyn Error>> where T: Read + Write {
+    info!("[Encryption] Initiating sender encryption communication");
     let secret = EphemeralSecret::random_from_rng(OsRng);
     let public_key = PublicKey::from(&secret);
     let encryption_request = EncryptionRequest {
         public_key: public_key.as_bytes().to_vec()
     };
 
+    info!("[Encryption] Sending public key");
     let mut prost_stream = Stream::new(&mut stream);
     let _ = prost_stream.send(&encryption_request);
 
@@ -22,9 +25,12 @@ pub async fn initiate_sender_communication<T>(mut stream: T) -> Result<Encrypted
         Err(error) => return Err(Box::new(error))
     };
 
+    info!("[Encryption] Received foreign public key");
+
     let public_key: [u8; 32] = encryption_response.public_key.try_into().expect("Vec length is not 32");
     let foreign_public_key = PublicKey::from(public_key);
 
+    info!("[Encryption] Doin the diffie hellman. Yeah.");
     let shared_secret = secret.diffie_hellman(&foreign_public_key);
 
     let iv: [u8; 24] = encryption_response.iv.try_into().expect("Vec length is not 24");

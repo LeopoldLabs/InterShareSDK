@@ -12,34 +12,26 @@ message EncryptionResponse {
     bytes iv = 2;
 }
 
-message MessageHeader {
-    int32 protocol_version = 1;
-    MessageTypes type = 2;
-
-    enum MessageTypes {
-        CONNECTION_UPDATE_REQUEST = 0;
-
-        KEY_EXCHANGE = 1;
-        KEY_EXCHANGE_RESPONSE = 2;
-
-        FILE_TRANSFER = 3;
-        CLIPBOARD_TRANSFER = 4;
+message Request {
+    enum RequestTypes {
+        SHARE_REQUEST = 0;
+        CONVENIENCE_DOWNLOAD_REQUEST = 1;
     }
-}
 
-message TransferRequest {
-    discovery.Device device = 1;
+    RequestTypes type = 1;
+    discovery.Device device = 2;
+    optional string share_id = 3;
 
     oneof intent {
-        FileTransferIntent file_transfer = 2;
-        ClipboardTransferIntent clipboard = 3;
+        FileTransferIntent file_transfer = 4;
+        ClipboardTransferIntent clipboard = 5;
     }
 }
 
 message FileTransferIntent {
     optional string file_name = 1;
     uint64 file_size = 2;
-    uint64 file_count = 4;
+    uint64 file_count = 3;
 }
 
 message ClipboardTransferIntent {

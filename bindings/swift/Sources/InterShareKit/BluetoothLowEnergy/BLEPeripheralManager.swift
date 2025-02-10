@@ -46,7 +46,7 @@ class BLEPeripheralManager: NSObject, BleServerImplementationDelegate, CBPeriphe
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didPublishL2CAPChannel PSM: CBL2CAPPSM, error: Error?) {
         print("L2CAP Channel PSM: \(PSM)")
-        internalHandler.setBleConnectionDetails(bleDetails: BluetoothLeConnectionInfo(uuid: "", psm: UInt32(PSM)))
+        internalHandler.setBluetoothLeDetails(bleInfo: BluetoothLeConnectionInfo(uuid: "", psm: UInt32(PSM)))
         addService()
     }
     

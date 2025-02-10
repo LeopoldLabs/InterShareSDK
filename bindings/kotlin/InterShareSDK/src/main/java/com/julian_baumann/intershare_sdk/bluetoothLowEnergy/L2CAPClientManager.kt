@@ -3,6 +3,7 @@ package com.julian_baumann.intershare_sdk.bluetoothLowEnergy
 import android.annotation.SuppressLint
 import com.julian_baumann.intershare_sdk.InternalNearbyServer
 import com.julian_baumann.intershare_sdk.L2CapDelegate
+import com.julian_baumann.intershare_sdk.handleIncomingL2capConnection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -21,7 +22,7 @@ class L2CAPClientManager(private val internalHandler: InternalNearbyServer): L2C
         val stream = L2CAPStream(socket)
 
         CoroutineScope(Dispatchers.IO).launch {
-            internalHandler.handleIncomingBleConnection(connectionId, stream)
+            handleIncomingL2capConnection(connectionId, stream)
         }
     }
 }

@@ -4,8 +4,14 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ConnectErrors {
+    #[error("Invalid protocol version. Receiver device has a unsupported version.")]
+    InvalidProtocolVersion,
+    
     #[error("Peripheral is unreachable")]
     Unreachable,
+
+    #[error("No text content to share")]
+    NoTextProvided,
 
     #[error("No files to send")]
     NoFilesProvided,
@@ -22,8 +28,8 @@ pub enum ConnectErrors {
     #[error("Failed to get socket address")]
     FailedToGetSocketAddress,
 
-    #[error("Failed to open TCP stream")]
-    FailedToOpenTcpStream,
+    #[error("Failed to open TCP stream: {error}")]
+    FailedToOpenTcpStream { error: String },
 
     #[error("Failed to get BLE connection details")]
     FailedToGetBleDetails,
@@ -42,6 +48,18 @@ pub enum ConnectErrors {
 
     #[error("Failed to get transfer request response: {error}")]
     FailedToGetTransferRequestResponse { error: String },
+}
+
+#[derive(Error, Debug, uniffi::Error)]
+pub enum RequestConvenienceShareErrors {
+    #[error("Not a valid link")]
+    NotAValidLink,
+
+    #[error("Incompatible protocol version")]
+    IncompatibleProtocolVersion,
+
+    #[error("Failed to connect")]
+    FailedToConnect { error: String }
 }
 
 #[derive(Error, Debug)]
@@ -83,7 +101,7 @@ pub enum IncomingErrors {
     Rejected,
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, uniffi::Error)]
 pub enum DiscoverySetupError {
     #[error("Unable to setup UDP Discovery")]
     UnableToSetupUdp,
