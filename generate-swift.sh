@@ -25,7 +25,13 @@ function buildStaticLibrary()
 {
     target=$1
     printInfo "Building for $target"
-    cargo build --manifest-path $FFI_PROJECT --lib --release --target $target
+    # cargo build --manifest-path $FFI_PROJECT --lib --release --target $target
+    RUSTFLAGS="-Zlocation-detail=none -Zfmt-debug=none" cargo +nightly build \
+        --manifest-path $FFI_PROJECT \
+        --lib \
+        -Z build-std=std,panic_abort \
+        -Z build-std-features="optimize_for_size" \
+        --target $target --release
 
     printDone
 }
@@ -65,7 +71,7 @@ function createUniversalBinary()
           -output "bindings/swift/.out/$target/libintershare_sdk.a"
     fi
 
-    # strip -x "bindings/swift/.out/$Target/libintershare_sdk.a"
+    strip -x "bindings/swift/.out/$target/libintershare_sdk.a"
 
     printDone
 }

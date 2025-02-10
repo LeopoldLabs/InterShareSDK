@@ -34,7 +34,9 @@ impl<'a> CompressionProgress<'a> {
 
     pub fn advance(&mut self) {
         self.finished_files += 1;
-        self.progress_delegate.progress_changed(ShareProgressState::Compressing { progress: self.finished_files as f64 / self.total_file_count as f64 });
+        let progress = self.finished_files as f64 / self.total_file_count as f64;
+        info!("Progress: {:?}", progress);
+        self.progress_delegate.progress_changed(ShareProgressState::Compressing { progress });
     }
 }
 
@@ -62,9 +64,9 @@ pub fn zip_files(tmp_file: File, file_paths: &Vec<String>, progress_delegate: &O
         None
     };
 
-    if let Some(progress) = &mut progress {
-        progress.advance();
-    }
+    // if let Some(progress) = &mut progress {
+    //     progress.advance();
+    // }
 
     for file_path in file_paths {
         let file = Path::new(file_path);
@@ -85,6 +87,8 @@ pub fn zip_files(tmp_file: File, file_paths: &Vec<String>, progress_delegate: &O
             }
         }
     }
+
+    info!("Finished compressing.");
 
     return zip.finish().expect("Failed to finish the ZIP");
 }

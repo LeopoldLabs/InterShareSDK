@@ -39,6 +39,7 @@ pub fn get_connection_details(device: Device) -> Option<DeviceConnectionInfo> {
 pub struct InternalDiscovery {
     pub ble_discovery_implementation: tokio::sync::RwLock<Option<Box<dyn BleDiscoveryImplementationDelegate>>>,
     current_delegate_id: String,
+    discovered_devices: RwLock<HashMap<String, DeviceConnectionInfo>>,
 
     #[cfg(target_os="windows")]
     pub(crate) scanning: Arc<AtomicBool>
@@ -74,6 +75,7 @@ impl InternalDiscovery {
         return Ok(Arc::new(Self {
             ble_discovery_implementation: tokio::sync::RwLock::new(None),
             current_delegate_id: delegate_id,
+            discovered_devices: RwLock::new(HashMap::new()),
 
             #[cfg(target_os="windows")]
             scanning: Arc::new(AtomicBool::new(false))
@@ -83,7 +85,7 @@ impl InternalDiscovery {
     pub fn get_devices(self: Arc<Self>) -> Vec<Device> {
         let mut devices = vec![];
 
-        for device in DISCOVERED_DEVICES.get().unwrap().read().unwrap().iter() {
+        for device in self.discovered_devices.read().unwrap().iter() {
             devices.push(device.1.clone().device.expect("No device in DeviceConnectionInfo"));
         }
 
@@ -96,6 +98,7 @@ impl InternalDiscovery {
 
     pub fn start(self: Arc<Self>) {
         DISCOVERED_DEVICES.get().unwrap().write().unwrap().clear();
+        self.discovered_devices.write().unwrap().clear();
 
         #[cfg(target_os="windows")]
         self.windows_start_scanning();
@@ -147,20 +150,21 @@ impl InternalDiscovery {
                     }
                 }
 
-                if DISCOVERED_DEVICES.get().unwrap().write().unwrap().contains_key(&device.id) {
-                    if !DISCOVERED_DEVICES.get().unwrap().write().unwrap().get(&device.id).unwrap().eq(&device_connection_info) {
+                if self.discovered_devices.write().unwrap().contains_key(&device.id) {
+                    if !self.discovered_devices.write().unwrap().get(&device.id).unwrap().eq(&device_connection_info) {
                         info!("Device {:} already exist, updating...", &device.name);
-                        self.add_discovered_device(device.clone());
+                        self.clone().add_discovered_device(device.clone());
                     }
                 } else {
                     info!("Device {:} discovered", &device.name);
-                    self.add_discovered_device(device.clone());
+                    self.clone().add_discovered_device(device.clone());
                 }
 
+                self.discovered_devices.write().unwrap().insert(device.id.clone(), device_connection_info.clone());
                 DISCOVERED_DEVICES.get().unwrap().write().unwrap().insert(device.id.clone(), device_connection_info.clone());
             }
             Some(Content::OfflineDeviceId(device_id)) => {
-                DISCOVERED_DEVICES.get().unwrap().write().unwrap().remove(&device_id);
+                self.discovered_devices.write().unwrap().remove(&device_id);
                 self.remove_discovered_device(device_id);
             }
         };

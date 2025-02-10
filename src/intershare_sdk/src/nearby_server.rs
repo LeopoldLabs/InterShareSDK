@@ -9,6 +9,7 @@ use prost_stream::Stream;
 use protocol::communication::request::RequestTypes;
 use protocol::communication::Request;
 use protocol::discovery::{BluetoothLeConnectionInfo, Device, DeviceConnectionInfo, DeviceDiscoveryMessage, TcpConnectionInfo};
+use tokio::runtime::Handle;
 use tokio::sync::RwLock;
 use url::Url;
 use protocol::discovery::device_discovery_message::Content;
@@ -420,35 +421,58 @@ impl InternalNearbyServer {
         let file_storage = self.file_storage.clone();
         // let current_share_store = self.current_share_store.clone();
 
-        tokio::spawn(async move {
-            let mut encrypted_stream = match initiate_receiver_communication(native_stream_handle) {
-                Ok(request) => request,
-                Err(error) => {
-                    error!("Encryption error {:}", error);
-                    return;
-                }
-            };
+        if Handle::try_current().is_err() {
+            // Create a new runtime if one doesn't exist
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+            rt.spawn(async move {
+                Self::process_incoming_connection(native_stream_handle, delegate, file_storage).await;
+            });
+        } else {
+            // Already in a Tokio runtime
+            tokio::spawn(async move {
+                Self::process_incoming_connection(native_stream_handle, delegate, file_storage).await;
+            });
+        }
+    }
 
-            let mut prost_stream = Stream::new(&mut encrypted_stream);
-            let request = match prost_stream.recv::<Request>() {
-                Ok(message) => message,
-                Err(error) => {
-                    error!("Error {:}", error);
-                    return;
-                }
-            };
 
-            if request.r#type == RequestTypes::ShareRequest as i32 {
-                let connection_request = ConnectionRequest::new(
-                    request,
-                    Box::new(encrypted_stream),
-                    file_storage.clone()
-                );
-
-                delegate.blocking_read().received_connection_request(Arc::new(connection_request));
-            } else {
-                // NearbyServer::received_convenience_download_request(request, current_share_store).await;
+    async fn process_incoming_connection<T>(
+        native_stream_handle: T,
+        delegate: Arc<RwLock<Box<dyn NearbyConnectionDelegate>>>,
+        file_storage: String,
+    ) where
+        T: Read + Write + Send + Close + 'static,
+    {
+        let mut encrypted_stream = match initiate_receiver_communication(native_stream_handle) {
+            Ok(request) => request,
+            Err(error) => {
+                error!("Encryption error {:}", error);
+                return;
             }
-        });
+        };
+
+        info!("Received encrypted connection request.");
+
+        let mut prost_stream = Stream::new(&mut encrypted_stream);
+        let request = match prost_stream.recv::<Request>() {
+            Ok(message) => message,
+            Err(error) => {
+                error!("Error {:}", error);
+                return;
+            }
+        };
+
+        if request.r#type == RequestTypes::ShareRequest as i32 {
+            let connection_request = ConnectionRequest::new(
+                request,
+                Box::new(encrypted_stream),
+                file_storage.clone()
+            );
+
+            info!("Sending received_connection_request delegate.");
+            delegate.read().await.received_connection_request(Arc::new(connection_request));
+        } else {
+            // NearbyServer::received_convenience_download_request(request, current_share_store).await;
+        }
     }
 }

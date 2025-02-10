@@ -5,3 +5,10 @@ members = [
     "src/intershare_sdk",
     "src/protocol"
 ]
+
+# [profile.release]
+# strip = true
+# opt-level = "s"
+# lto = true
+# codegen-units = 1
+# panic = "abort"

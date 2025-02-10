@@ -10,9 +10,7 @@ use windows::{
             BluetoothLEScanningMode,
         },
         BluetoothLEDevice,
-        GenericAttributeProfile::{
-            GattCommunicationStatus,
-        },
+        GenericAttributeProfile::GattCommunicationStatus,
     },
     Foundation::TypedEventHandler,
     Storage::Streams::DataReader,

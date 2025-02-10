@@ -93,7 +93,7 @@ class NearbyServer(context: Context, myDevice: Device, delegate: NearbyConnectio
     init {
         setTmpDir(context.cacheDir.absolutePath)
         
-        internal.addBleImplementation(internalBleImplementation)
+        internal.addBluetoothImplementation(internalBleImplementation)
         internal.addL2CapClient(internalL2CapClient)
 
         val request = NetworkRequest.Builder().build()

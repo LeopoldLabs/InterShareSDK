@@ -82,7 +82,7 @@ internal class BLEPeripheralManager(private val context: Context, private val in
         l2CAPThread = Thread {
             try {
                 val psm = bluetoothL2CAPServer!!.psm.toUInt()
-                internalNearbyServer.setBleConnectionDetails(BluetoothLeConnectionInfo("", psm))
+                internalNearbyServer.setBluetoothLeDetails(BluetoothLeConnectionInfo("", psm))
 
                 while (true) {
                     val connection = bluetoothL2CAPServer!!.accept()

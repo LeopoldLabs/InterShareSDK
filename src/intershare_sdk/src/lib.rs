@@ -179,6 +179,7 @@ pub fn get_log_file_path_str() -> Option<String> {
 static TMP_DIR: RwLock<Option<String>> = RwLock::new(None);
 
 #[cfg(target_os = "android")]
+#[uniffi::export]
 pub fn set_tmp_dir(tmp: String) {
     let mut tmp_dir = TMP_DIR.write().unwrap();
     *tmp_dir = Some(tmp);
