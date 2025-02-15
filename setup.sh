@@ -9,7 +9,7 @@ function setupApple() {
         aarch64-apple-ios-sim \
         x86_64-apple-ios \
         x86_64-apple-darwin \
-        aarch64-apple-ios-darwin
+        aarch64-apple-darwin
 }
 
 function setupAndroid() {
@@ -22,5 +22,5 @@ function setupAndroid() {
         i686-linux-android
 }
 
-setupApple
+# setupApple
 setupAndroid
