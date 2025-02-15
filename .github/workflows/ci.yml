@@ -24,7 +24,7 @@ jobs:
       shell: pwsh
       run: |
           .\setup.ps1
-  
+
     - name: Install Protoc
       uses: arduino/setup-protoc@v3
       with:
@@ -96,5 +96,5 @@ jobs:
 
         - name: Build library
           run: |
-            rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios x86_64-apple-darwin aarch64-apple-ios-darwin
+            rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios x86_64-apple-darwin aarch64-apple-darwin
             ./generate-swift.sh

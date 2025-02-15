@@ -22,5 +22,5 @@ function setupAndroid() {
         i686-linux-android
 }
 
-# setupApple
+setupApple
 setupAndroid
