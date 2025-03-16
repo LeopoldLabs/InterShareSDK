@@ -93,7 +93,7 @@ jobs:
 
   create-release:
     name: Create Realase
-    needs: [publish-android, publish-dotnet]
+    needs: [publish-android, publish-dotnet, build-apple]
     runs-on: ubuntu-latest
     steps:
     - name: Create Release strings

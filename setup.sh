@@ -4,6 +4,9 @@ set -e
 function setupApple() {
     echo "Setting up iOS and macOS targets"
 
+    rustup install nightly
+    rustup component add rust-src --toolchain nightly
+
     rustup target add \
         aarch64-apple-ios \
         aarch64-apple-ios-sim \
@@ -23,4 +26,4 @@ function setupAndroid() {
 }
 
 setupApple
-# setupAndroid
+setupAndroid
