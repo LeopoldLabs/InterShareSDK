@@ -122,7 +122,7 @@ impl ConnectionRequest {
     pub fn get_intent_type(&self) -> ConnectionIntentType {
         match self.transfer_request.intent.clone().expect("Intent information missing") {
             Intent::FileTransfer(_) => ConnectionIntentType::FileTransfer,
-            Intent::Clipboard(_) => ConnectionIntentType::FileTransfer
+            Intent::Clipboard(_) => ConnectionIntentType::Clipboard
         }
     }
 

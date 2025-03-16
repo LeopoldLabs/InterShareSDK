@@ -106,8 +106,9 @@ impl ShareStore {
             }))
         };
 
+        update_progress(&progress_delegate, SendProgressState::Transferring { progress: 0.8 });
         let _ = proto_stream.send(&transfer_request);
-        update_progress(&progress_delegate, SendProgressState::Transferring { progress: 1.0 });
+        update_progress(&progress_delegate, SendProgressState::Finished);
 
         return Ok(());
     }
