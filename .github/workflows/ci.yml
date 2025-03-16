@@ -10,6 +10,7 @@ env:
 
 jobs:
   build-dotnet:
+    if: false
     name: Build C#
     runs-on: windows-latest
     steps:

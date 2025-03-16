@@ -56,19 +56,27 @@ function createUniversalBinary()
     target=$1
     firstArchitecture=$2
     secondArchitecture=$3
+    thirdArchitecture=$4
 
     printInfo "Generating universal binary for $target"
 
-    if [ -z "$secondArchitecture" ]
-    then
+    if [ -z "$secondArchitecture" ]; then
         lipo -create \
           "target/$firstArchitecture/release/libintershare_sdk.a" \
           -output "bindings/swift/.out/$target/libintershare_sdk.a"
-    else
+    elif [ -z "$thirdArchitecture" ]; then
         lipo -create \
           "target/$firstArchitecture/release/libintershare_sdk.a" \
           "target/$secondArchitecture/release/libintershare_sdk.a" \
           -output "bindings/swift/.out/$target/libintershare_sdk.a"
+    else
+        echo "$firstArchitecture $secondArchitecture $thirdArchitecture"
+        lipo -create \
+        "target/$firstArchitecture/release/libintershare_sdk.a" \
+        "target/$secondArchitecture/release/libintershare_sdk.a" \
+        "target/$thirdArchitecture/release/libintershare_sdk.a" \
+        -output "bindings/swift/.out/$target/libintershare_sdk.a"
+
     fi
 
     strip -x "bindings/swift/.out/$target/libintershare_sdk.a"
@@ -118,8 +126,12 @@ buildStaticLibrary x86_64-apple-ios
 buildStaticLibrary x86_64-apple-darwin
 buildStaticLibrary aarch64-apple-darwin
 
+# macOS Xcode Previews
+# buildStaticLibrary arm64e-apple-darwin
+
 generateUniffiBindings
 
+# createUniversalBinary "macos" "x86_64-apple-darwin" "aarch64-apple-darwin" "arm64e-apple-darwin"
 createUniversalBinary "macos" "x86_64-apple-darwin" "aarch64-apple-darwin"
 createUniversalBinary "ios" "aarch64-apple-ios"
 createUniversalBinary "ios-simulator" "x86_64-apple-ios" "aarch64-apple-ios-sim"
