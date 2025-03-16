@@ -16,7 +16,7 @@ x25519-dalek = { version = "2.0.1", default-features = false }
 chacha20 = { version = "0.9.0" }
 chacha20poly1305 = { version = "^0.10", default-features = false, features = ["stream", "rand_core"] }
 uuid = { version = "1.2.0", default-features = false, features = ["v4", "fast-rng"]}
-rand_core = { version = "0.6", default-features = false }
+rand_core = { version = "0.6", default-features = false, features = ["getrandom"]}
 thiserror = { version = "2.0.11", default-features = false }
 tokio = {  version = "1.35.1", default-features = false, features = ["net", "io-util", "time", "sync", "rt", "rt-multi-thread", "macros"] }
 local-ip-address = { git = "https://github.com/julian-baumann/local-ip-address.git", rev = "4fa3e37" }

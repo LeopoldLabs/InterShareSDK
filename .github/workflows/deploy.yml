@@ -13,6 +13,7 @@ env:
 
 jobs:
   publish-dotnet:
+    if: false
     name: Publish Windows .NET NuGet
     runs-on: windows-latest
     steps:
@@ -27,7 +28,7 @@ jobs:
       shell: pwsh
       run: |
           .\setup.ps1
-  
+
     - name: Install Protoc
       uses: arduino/setup-protoc@v3
       with:
@@ -93,7 +94,7 @@ jobs:
 
   create-release:
     name: Create Realase
-    needs: [publish-android, publish-dotnet]
+    needs: [publish-android, publish-dotnet, build-apple]
     runs-on: ubuntu-latest
     steps:
     - name: Create Release strings
