@@ -573,6 +573,8 @@ public protocol ConnectionRequestProtocol: AnyObject {
 
     func getSender() -> Device
 
+    func isLink() -> Bool
+
     func setProgressDelegate(delegate: ReceiveProgressDelegate)
 
     func updateProgress(newState: ReceiveProgressState)
@@ -664,6 +666,12 @@ open class ConnectionRequest:
     open func getSender() -> Device {
         return try! FfiConverterTypeDevice.lift(try! rustCall {
             uniffi_intershare_sdk_fn_method_connectionrequest_get_sender(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func isLink() -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_intershare_sdk_fn_method_connectionrequest_is_link(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -3820,6 +3828,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_checksum_method_connectionrequest_get_sender() != 48559 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_intershare_sdk_checksum_method_connectionrequest_is_link() != 12597 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_checksum_method_connectionrequest_set_progress_delegate() != 13934 {
