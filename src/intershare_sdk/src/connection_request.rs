@@ -7,6 +7,7 @@ use prost_stream::Stream;
 use protocol::communication::request::Intent;
 use protocol::communication::{ClipboardTransferIntent, FileTransferIntent, Request, TransferRequestResponse};
 use protocol::discovery::Device;
+use regex::Regex;
 use tokio::sync::RwLock;
 use crate::{encryption::EncryptedReadWrite, nearby_server::ConnectionIntentType};
 use crate::zip::unzip_file;
@@ -124,6 +125,15 @@ impl ConnectionRequest {
             Intent::FileTransfer(_) => ConnectionIntentType::FileTransfer,
             Intent::Clipboard(_) => ConnectionIntentType::Clipboard
         }
+    }
+
+    pub fn is_link(&self) -> bool {
+        if let Some(clipboard_intent) = self.get_clipboard_intent() {
+            let url_regex = Regex::new(r"^https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)$").unwrap();
+            return url_regex.is_match(&clipboard_intent.clipboard_content);
+        }
+
+        return false;
     }
 
     pub fn get_file_transfer_intent(&self) -> Option<FileTransferIntent> {
