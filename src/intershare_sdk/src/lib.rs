@@ -24,7 +24,6 @@ use std::fs::File;
 #[cfg(not(target_os="android"))]
 use std::sync::Once;
 
-
 pub use protocol;
 pub use protocol::communication::ClipboardTransferIntent;
 pub use protocol::discovery::Device;
@@ -36,7 +35,7 @@ pub use crate::protocol::discovery::{BluetoothLeConnectionInfo, TcpConnectionInf
 pub use crate::protocol::communication::FileTransferIntent;
 pub use crate::nearby_server::{InternalNearbyServer, NearbyConnectionDelegate};
 pub use crate::nearby_server::{ShareProgressDelegate, ShareProgressState};
-pub use crate::errors::{ConnectErrors};
+pub use crate::errors::ConnectErrors;
 pub use crate::share_store::{ShareStore, ConnectionMedium, SendProgressDelegate, SendProgressState};
 
 
@@ -99,7 +98,7 @@ fn convert_os_str(os_str: &OsStr) -> String {
     return os_str.to_string_lossy().to_string();
 }
 
-#[cfg(not(target_os="android"))]
+#[cfg(not(target_os = "android"))]
 fn get_log_file_path() -> Option<PathBuf> {
     let project_dirs = BaseDirs::new()?;
     let config_dir = project_dirs.config_dir();
@@ -109,6 +108,7 @@ fn get_log_file_path() -> Option<PathBuf> {
         .join("intershare.log")
     )
 }
+
 #[cfg(target_os="android")]
 fn get_log_file_path() -> Option<PathBuf> {
     return None;
@@ -168,6 +168,8 @@ pub fn init_logger() {
 
 #[uniffi::export]
 pub fn get_log_file_path_str() -> Option<String> {
+    init_logger();
+
     if let Ok(path) = get_log_file_path()?.into_os_string().into_string() {
         return Some(path);
     }

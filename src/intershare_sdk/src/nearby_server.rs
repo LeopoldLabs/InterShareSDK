@@ -25,7 +25,7 @@ use crate::zip::zip_files;
 use protocol::prost::Message;
 
 #[cfg(target_os="windows")]
-use windows::{Devices::Bluetooth::GenericAttributeProfile::*};
+use windows::Devices::Bluetooth::GenericAttributeProfile::*;
 
 #[uniffi::export(callback_interface)]
 pub trait BleServerImplementationDelegate: Send + Sync + Debug {
@@ -38,6 +38,7 @@ pub trait L2CapDelegate: Send + Sync + Debug {
     fn open_l2cap_connection(&self, connection_id: String, peripheral_uuid: String, psm: u32);
 }
 
+#[derive(PartialEq)]
 pub enum ConnectionIntentType {
     FileTransfer,
     Clipboard
@@ -331,7 +332,7 @@ impl InternalNearbyServer {
             Some(text),
             allow_convenience_share,
             None,
-            None,
+            Arc::new(RwLock::new(None)),
             self.ble_l2_cap_client.clone(),
             self.device_connection_info.read().await.clone()
         ));
@@ -358,7 +359,7 @@ impl InternalNearbyServer {
             None,
             allow_convenience_share,
             Some(Arc::new(RwLock::new(zip_file))),
-            Some(Arc::new(RwLock::new(tmp_file))),
+            Arc::new(RwLock::new(Some(tmp_file))),
             self.ble_l2_cap_client.clone(),
             self.device_connection_info.read().await.clone()
         ));

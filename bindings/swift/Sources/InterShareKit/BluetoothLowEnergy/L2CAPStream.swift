@@ -51,8 +51,8 @@ class L2CapStream: NSObject, StreamDelegate, NativeStreamDelegate {
     }
     
     func disconnect() {
-        channel!.outputStream.close()
-        channel!.inputStream.close()
+        channel?.outputStream.close()
+        channel?.inputStream.close()
         channel = nil
     }
 }

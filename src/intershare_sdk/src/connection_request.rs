@@ -54,10 +54,6 @@ impl ConnectionRequest {
         }
     }
 
-    fn handle_clipboard(&self, _clipboard_transfer_intent: ClipboardTransferIntent) -> Option<Vec<String>> {
-        return None;
-    }
-
     fn handle_file(&self, mut stream: MutexGuard<Box<dyn EncryptedReadWrite>>, file_transfer: FileTransferIntent) -> Option<Vec<String>> {
         let named_file = create_tmp_file();
         let mut zip_file = named_file.reopen().expect("Failed to reopen temporary ZIP file");
@@ -93,10 +89,12 @@ impl ConnectionRequest {
         self.update_progress(ReceiveProgressState::Extracting);
         match unzip_file(zip_file, &self.file_storage) {
             Ok(files) => {
+                let _ = named_file.close();
                 self.update_progress(ReceiveProgressState::Finished);
                 Some(files)
             }
             Err(error) => {
+                let _ = named_file.close();
                 error!("Error while unzipping: {:?}", error);
                 self.update_progress(ReceiveProgressState::Cancelled);
                 None
@@ -151,6 +149,14 @@ impl ConnectionRequest {
     }
 
     pub fn decline(&self) {
+        if self.get_intent_type() == ConnectionIntentType::Clipboard {
+            if let Ok(connection_guard) = self.connection.lock() {
+                connection_guard.close();
+            }
+
+            return;
+        }
+
         if let Ok(mut connection_guard) = self.connection.lock() {
             let mut stream = Stream::new(&mut *connection_guard);
 
@@ -170,6 +176,14 @@ impl ConnectionRequest {
     }
 
     pub fn accept(&self) -> Option<Vec<String>> {
+        if self.get_intent_type() == ConnectionIntentType::Clipboard {
+            if let Ok(connection_guard) = self.connection.lock() {
+                connection_guard.close();
+            }
+
+            return Some(vec![]);
+        }
+
         self.update_progress(ReceiveProgressState::Handshake);
 
         if let Ok(mut connection_guard) = self.connection.lock() {
@@ -179,7 +193,7 @@ impl ConnectionRequest {
 
             match self.get_intent() {
                 Intent::FileTransfer(file_transfer) => self.handle_file(connection_guard, file_transfer),
-                Intent::Clipboard(clipboard) => self.handle_clipboard(clipboard)
+                Intent::Clipboard(_) => None
             }
         } else {
             None

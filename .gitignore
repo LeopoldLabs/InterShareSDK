@@ -22,3 +22,4 @@ bindings/csharp/InterShareSdk/bin
 bindings/csharp/InterShareSdk/obj
 bindings/csharp/Tests/bin
 bindings/csharp/Tests/obj
+.index-build

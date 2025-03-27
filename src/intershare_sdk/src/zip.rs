@@ -77,7 +77,7 @@ pub fn zip_files(tmp_file: File, file_paths: &Vec<String>, progress_delegate: &O
         } else {
             info!("Compressing file: {:?}", file);
             zip.start_file(convert_os_str(file.file_name().unwrap()), SimpleFileOptions::default())
-                .unwrap();
+                .expect(&format!("Unable to start zip processing file: {:?}", file));
 
             let mut file = File::open(file_path).unwrap();
             let _ = std::io::copy(&mut file, &mut zip);

@@ -35,7 +35,7 @@ pub struct ShareStore {
     pub clipboard: Option<String>,
     allow_convenience_share: bool,
     pub zip: Option<Arc<RwLock<File>>>,
-    pub tmp_file: Option<Arc<RwLock<NamedTempFile>>>,
+    pub tmp_file: Arc<RwLock<Option<NamedTempFile>>>,
     ble_l2_cap_client: Arc<RwLock<Option<Box<dyn L2CapDelegate>>>>,
     device_connection_info: DeviceConnectionInfo
 }
@@ -53,7 +53,7 @@ impl ShareStore {
             clipboard: Option<String>,
             allow_convenience_share: bool,
             zip: Option<Arc<RwLock<File>>>,
-            tmp_file: Option<Arc<RwLock<NamedTempFile>>>,
+            tmp_file: Arc<RwLock<Option<NamedTempFile>>>,
             ble_l2_cap_client: Arc<RwLock<Option<Box<dyn L2CapDelegate>>>>,
             device_connection_info: DeviceConnectionInfo) -> Self {
         Self {
@@ -122,7 +122,7 @@ impl ShareStore {
             return Err(ConnectErrors::NoFilesProvided);
         };
 
-        let Some(tmp_file) = &self.tmp_file else {
+        let Some(ref tmp_file) = *self.tmp_file.write().await else {
             return Err(ConnectErrors::NoFilesProvided);
         };
 
@@ -186,7 +186,7 @@ impl ShareStore {
 
         let mut all_written: usize = 0;
 
-        let Ok(mut tmp_file) = tmp_file.write().await.reopen() else {
+        let Ok(mut tmp_file) = tmp_file.reopen() else {
             return Err(ConnectErrors::NoFilesProvided);
         };
 
@@ -216,6 +216,15 @@ impl ShareStore {
         }
 
         return Ok(());
+    }
+
+    pub async fn close(&self) {
+        let mut guard = self.tmp_file.write().await;
+
+        // Take ownership of the NamedTempFile, leaving None behind
+        if let Some(tmp_file) = guard.take() {
+            let _ = tmp_file.close(); // You can handle the Result here if needed
+        }
     }
 
     /// https://share.intershare.app?id=hgf8o47fdsb394mv385&ip=192.168.12.13&port=5200&device_id=9A403351-A926-4D1C-855F-432A6ED51E0E&protocol_version=1
