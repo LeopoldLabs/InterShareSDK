@@ -12,4 +12,5 @@ cargo build --lib --release --target aarch64-pc-windows-msvc
 Pop-Location
 
 # Run uniffi-bindgen for C# bindings generation
-uniffi-bindgen-cs .\src\intershare_sdk\src\intershare_sdk.udl --out-dir="bindings/csharp/InterShareSdk"
+cargo build --release
+uniffi-bindgen-cs --library --out-dir="bindings/csharp/InterShareSdk" .\target\release\intershare_sdk.dll
