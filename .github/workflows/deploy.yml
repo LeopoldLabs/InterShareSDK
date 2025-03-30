@@ -13,7 +13,6 @@ env:
 
 jobs:
   publish-dotnet:
-    if: false
     name: Publish Windows .NET NuGet
     runs-on: windows-latest
     steps:
