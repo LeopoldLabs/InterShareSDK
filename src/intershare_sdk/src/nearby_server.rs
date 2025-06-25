@@ -96,7 +96,7 @@ impl InternalNearbyServer {
     pub fn new(my_device: Device, file_storage: String, delegate: Option<Box<dyn NearbyConnectionDelegate>>) -> Self {
         init_logger();
 
-        let mut my_device= my_device.clone();
+        let mut my_device = my_device.clone();
         my_device.protocol_version = Some(PROTOCOL_VERSION);
 
         let device_connection_info = DeviceConnectionInfo {
@@ -163,7 +163,9 @@ impl InternalNearbyServer {
     }
 
     pub fn change_device(&self, new_device: Device) {
-        self.device_connection_info.blocking_write().device = Some(new_device);
+        let mut device = new_device.clone();
+        device.protocol_version = Some(PROTOCOL_VERSION);
+        self.device_connection_info.blocking_write().device = Some(device);
     }
 
     pub fn set_bluetooth_le_details(&self, ble_info: BluetoothLeConnectionInfo) {

@@ -79,7 +79,7 @@ function createUniversalBinary()
 
     fi
 
-    strip -x "bindings/swift/.out/$target/libintershare_sdk.a"
+#    strip -x "bindings/swift/.out/$target/libintershare_sdk.a"
 
     printDone
 }

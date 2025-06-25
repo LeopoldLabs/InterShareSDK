@@ -9,7 +9,7 @@ use prost_stream::Stream;
 use protocol::communication::request::RequestTypes;
 use protocol::communication::Request;
 use tokio::sync::RwLock;
-
+use tokio::task::JoinHandle;
 use crate::communication::initiate_receiver_communication;
 use crate::connection_request::ConnectionRequest;
 use crate::nearby_server::{NearbyConnectionDelegate, InternalNearbyServer};
@@ -20,7 +20,8 @@ pub struct TcpServer {
     listener: Option<TcpListener>,
     delegate: Arc<RwLock<Box<dyn NearbyConnectionDelegate>>>,
     file_storage: String,
-    running: Arc<AtomicBool>
+    running: Arc<AtomicBool>,
+    tcp_server_task: RwLock<Option<JoinHandle<()>>>
 }
 
 impl InternalNearbyServer {
@@ -35,31 +36,45 @@ impl InternalNearbyServer {
         listener.set_nonblocking(false).expect("Failed to set non blocking");
         let port = listener.local_addr()?.port();
 
+        info!("Started tcp listener on port {}", port);
+
         return Ok(TcpServer {
             port,
             listener: Some(listener),
             delegate,
             file_storage,
-            running: Arc::new(AtomicBool::new(true))
+            running: Arc::new(AtomicBool::new(true)),
+            tcp_server_task: RwLock::new(None)
         });
     }
 
     pub async fn start_loop(&self) {
-        let Some(tcp_server) = &*self.tcp_server.read().await else {
+        let mut guard = self.tcp_server.write().await;
+        let Some(tcp_server) = guard.as_mut() else {
             return;
         };
 
-        let listener = tcp_server.listener.as_ref().expect("Listener is not initialized").try_clone().expect("Failed to clone listener");
+        if let Some(existing_task) = tcp_server.tcp_server_task.write().await.take() {
+            existing_task.abort();
+        }
+
+        tcp_server.running.store(true, Ordering::SeqCst);
+
+        // let listener = tcp_server.listener.as_ref().expect("Listener is not initialized").try_clone().expect("Failed to clone listener");
+        let listener = tcp_server.listener.take().expect("Listener is not initialized");
+        listener.set_nonblocking(true).expect("Failed to set non blocking");
         let delegate = tcp_server.delegate.clone();
         let file_storage = tcp_server.file_storage.clone();
         let running = tcp_server.running.clone();
-        // let current_share_store = self.current_share_store.clone();
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
+            info!("Started loop");
             while running.load(Ordering::SeqCst) {
                 let Ok((tcp_stream, _socket_address)) = listener.accept() else {
                     continue
                 };
+
+                tcp_stream.set_nonblocking(false).expect("Failed to set non blocking");
 
                 let mut encrypted_stream = match initiate_receiver_communication(tcp_stream) {
                     Ok(request) => request,
@@ -90,15 +105,35 @@ impl InternalNearbyServer {
                     // NearbyServer::received_convenience_download_request(transfer_request, current_share_store.clone()).await;
                 }
             }
+
+            info!("Stopped loop");
         });
+
+        *tcp_server.tcp_server_task.write().await = Some(handle);
     }
 
     pub async fn stop_tcp_server(&self) {
-        let Some(tcp_server) = &*self.tcp_server.read().await else {
+        // let Some(tcp_server) = &*self.tcp_server.read().await else {
+        //     return;
+        // };
+        let mut tcp_server_guard = self.tcp_server.write().await;
+        let Some(tcp_server) = tcp_server_guard.as_mut() else {
             return;
         };
 
+        info!("Stopping TCP server port {}", tcp_server.port);
+
         tcp_server.running.store(false, Ordering::SeqCst);
+
+
+        if let Some(task) = tcp_server.tcp_server_task.write().await.take() {
+            task.abort();
+            info!("Stopped TCP connection handle task")
+        }
+
+        tcp_server.listener = None;
+        *tcp_server_guard = None;
+
         info!("TCP server stopped.");
     }
 }

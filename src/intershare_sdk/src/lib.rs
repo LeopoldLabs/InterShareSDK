@@ -80,8 +80,11 @@ pub enum VersionCompatibility {
 #[uniffi::export]
 pub fn is_compatible(device: Device) -> VersionCompatibility {
     let Some(remote_device_version) = device.protocol_version else {
+        error!("Cannot determine compatible device version.");
         return VersionCompatibility::OutdatedVersion;
     };
+
+    error!("Foreign device version: {:?}, my version: {:?}", remote_device_version, PROTOCOL_VERSION);
 
     if remote_device_version < PROTOCOL_VERSION {
         return VersionCompatibility::OutdatedVersion;

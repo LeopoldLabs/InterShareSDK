@@ -1,5 +1,6 @@
-use std::{fs, fs::File, io::BufReader, path::Path};
+use std::{fs, fs::File, io::BufReader, io::Read, path::Path};
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::PathBuf;
 use log::{error, info};
 
@@ -20,6 +21,8 @@ fn normalize_path(path: &Path) -> String {
 pub struct CompressionProgress<'a> {
     pub total_file_count: usize,
     pub finished_files: usize,
+    pub total_bytes: u64,
+    pub processed_bytes: u64,
     progress_delegate: &'a Box<dyn ShareProgressDelegate>
 }
 
@@ -28,15 +31,32 @@ impl<'a> CompressionProgress<'a> {
         Self {
             total_file_count,
             finished_files,
+            total_bytes: 0,
+            processed_bytes: 0,
             progress_delegate
         }
     }
 
     pub fn advance(&mut self) {
         self.finished_files += 1;
-        let progress = self.finished_files as f64 / self.total_file_count as f64;
+        let progress = if self.total_file_count == 1 {
+            // For single file, use byte progress
+            if self.total_bytes > 0 {
+                self.processed_bytes as f64 / self.total_bytes as f64
+            } else {
+                0.0
+            }
+        } else {
+            // For multiple files, use file count progress
+            self.finished_files as f64 / self.total_file_count as f64
+        };
         info!("Progress: {:?}", progress);
         self.progress_delegate.progress_changed(ShareProgressState::Compressing { progress });
+    }
+
+    pub fn update_bytes(&mut self, bytes: u64) {
+        self.processed_bytes += bytes;
+        self.advance();
     }
 }
 
@@ -59,14 +79,21 @@ pub fn zip_files(tmp_file: File, file_paths: &Vec<String>, progress_delegate: &O
 
     let mut progress = if let Some(progress_delegate) = progress_delegate {
         let total_file_count: usize = get_file_count(&file_paths);
-        Some(CompressionProgress::new(total_file_count, 0, progress_delegate))
+        let mut progress = CompressionProgress::new(total_file_count, 0, progress_delegate);
+        
+        // For single file, get total size
+        if total_file_count == 1 {
+            if let Some(path) = file_paths.first() {
+                if let Ok(metadata) = std::fs::metadata(path) {
+                    progress.total_bytes = metadata.len();
+                }
+            }
+        }
+        
+        Some(progress)
     } else {
         None
     };
-
-    // if let Some(progress) = &mut progress {
-    //     progress.advance();
-    // }
 
     for file_path in file_paths {
         let file = Path::new(file_path);
@@ -76,21 +103,62 @@ pub fn zip_files(tmp_file: File, file_paths: &Vec<String>, progress_delegate: &O
             zip_directory(&mut zip, file, file, Some(&prefix), &mut progress);
         } else {
             info!("Compressing file: {:?}", file);
-            zip.start_file(convert_os_str(file.file_name().unwrap()), SimpleFileOptions::default())
-                .expect(&format!("Unable to start zip processing file: {:?}", file));
+            if let Err(e) = zip.start_file(convert_os_str(file.file_name().unwrap()), SimpleFileOptions::default()) {
+                error!("Failed to start zip file: {}", e);
+                continue;
+            }
 
-            let mut file = File::open(file_path).unwrap();
-            let _ = std::io::copy(&mut file, &mut zip);
+            let mut file = match File::open(file_path) {
+                Ok(f) => f,
+                Err(e) => {
+                    error!("Failed to open file {}: {}", file_path, e);
+                    continue;
+                }
+            };
+
+            let mut buffer = [0; 8192];
+            loop {
+                let bytes_read = match file.read(&mut buffer) {
+                    Ok(n) => n,
+                    Err(e) => {
+                        error!("Failed to read file {}: {}", file_path, e);
+                        break;
+                    }
+                };
+                
+                if bytes_read == 0 {
+                    break;
+                }
+
+                if let Err(e) = zip.write_all(&buffer[..bytes_read]) {
+                    error!("Failed to write to zip: {}", e);
+                    break;
+                }
+                
+                if let Some(progress) = &mut progress {
+                    if progress.total_file_count == 1 {
+                        progress.update_bytes(bytes_read as u64);
+                    }
+                }
+            }
 
             if let Some(progress) = &mut progress {
-                progress.advance();
+                if progress.total_file_count > 1 {
+                    progress.advance();
+                }
             }
         }
     }
 
     info!("Finished compressing.");
 
-    return zip.finish().expect("Failed to finish the ZIP");
+    match zip.finish() {
+        Ok(file) => file,
+        Err(e) => {
+            error!("Failed to finish zip: {}", e);
+            panic!("Failed to finish zip: {}", e);
+        }
+    }
 }
 
 pub fn zip_directory(zip: &mut ZipWriter<File>, base_dir: &Path, current_dir: &Path, prefix: Option<&str>, progress_delegate: &mut Option<CompressionProgress>) {
