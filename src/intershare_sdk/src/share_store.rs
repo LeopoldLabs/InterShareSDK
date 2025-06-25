@@ -122,7 +122,7 @@ impl ShareStore {
             return Err(ConnectErrors::NoFilesProvided);
         };
 
-        let Some(ref tmp_file) = *self.tmp_file.write().await else {
+        let Some(ref tmp_file) = *self.tmp_file.read().await else {
             return Err(ConnectErrors::NoFilesProvided);
         };
 

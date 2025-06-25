@@ -10,7 +10,7 @@ public class NearbyServerTests : NearbyConnectionDelegate
         var device = new Device(id: "97658e56-dc41-4ff2-a2f4-876dac4a5d30", name: "Windows PC Test", deviceType: 0);
 
         var discovery = new NearbyServer(device, this);
-        discovery.Start();
+        await discovery.Start();
 
         while (true)
         {

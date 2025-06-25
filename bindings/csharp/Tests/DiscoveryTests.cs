@@ -2,7 +2,7 @@ using InterShareSdk;
 
 namespace Tests;
 
-public class DiscoveryTests : DiscoveryDelegate
+public class DiscoveryTests : IDiscoveryDelegate
 {
     [Test]
     public async Task Setup()
