@@ -16,6 +16,7 @@ import com.julian_baumann.intershare_sdk.BleDiscoveryImplementationDelegate
 import com.julian_baumann.intershare_sdk.InternalDiscovery
 import kotlinx.coroutines.*
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 
 
 @SuppressLint("MissingPermission")
@@ -24,26 +25,38 @@ class BluetoothGattCallbackImplementation(
     private var currentlyConnectedDevices: MutableList<BluetoothDevice>,
     private var discoveredPeripherals: MutableList<BluetoothDevice>) : BluetoothGattCallback() {
     override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-        if (newState == BluetoothProfile.STATE_CONNECTED) {
-            gatt.requestMtu(150)
-        } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-            gatt.close()
-            currentlyConnectedDevices.remove(gatt.device)
-        } else {
-            Log.d("InterShareSDK [BLE Central]", "newState: $newState")
-            currentlyConnectedDevices.remove(gatt.device)
+        when (newState) {
+            BluetoothProfile.STATE_CONNECTED -> {
+                Log.d("InterShareSDK [BLE Central]", "Connected to ${gatt.device.name}")
+                gatt.requestMtu(150)
+            }
+            BluetoothProfile.STATE_DISCONNECTED -> {
+                Log.d("InterShareSDK [BLE Central]", "Disconnected from ${gatt.device.name}")
+                gatt.close()
+                currentlyConnectedDevices.remove(gatt.device)
+            }
+            else -> {
+                Log.d("InterShareSDK [BLE Central]", "Connection state changed to: $newState for ${gatt.device.name}")
+                currentlyConnectedDevices.remove(gatt.device)
+            }
         }
     }
 
     override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
         if (status == BluetoothGatt.GATT_SUCCESS) {
+            Log.d("InterShareSDK [BLE Central]", "MTU changed to $mtu, discovering services")
             gatt?.discoverServices()
+        } else {
+            Log.w("InterShareSDK [BLE Central]", "MTU change failed with status: $status")
         }
     }
 
     override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
         if (status == BluetoothGatt.GATT_SUCCESS) {
+            Log.d("InterShareSDK [BLE Central]", "Services discovered for ${gatt.device.name}")
             getDeviceInfo(gatt)
+        } else {
+            Log.w("InterShareSDK [BLE Central]", "Service discovery failed with status: $status")
         }
     }
 
@@ -53,7 +66,15 @@ class BluetoothGattCallbackImplementation(
 
         service?.let {
             val characteristic = it.getCharacteristic(discoveryCharacteristicUUID)
-            gatt.readCharacteristic(characteristic)
+            if (characteristic != null) {
+                gatt.readCharacteristic(characteristic)
+            } else {
+                Log.w("InterShareSDK [BLE Central]", "Discovery characteristic not found")
+                gatt.disconnect()
+            }
+        } ?: run {
+            Log.w("InterShareSDK [BLE Central]", "Discovery service not found")
+            gatt.disconnect()
         }
     }
 
@@ -92,7 +113,7 @@ class BluetoothGattCallbackImplementation(
 
     private fun handleCharacteristicData(data: ByteArray, status: Int, gatt: BluetoothGatt) {
         if (status == BluetoothGatt.GATT_SUCCESS) {
-            Log.d("InterShareSDK [BLE Central]", "GATT READ was a Success")
+            Log.d("InterShareSDK [BLE Central]", "GATT READ was successful for ${gatt.device.name}")
 
             internal.parseDiscoveryMessage(data, gatt.device.address)
 
@@ -100,9 +121,11 @@ class BluetoothGattCallbackImplementation(
                 discoveredPeripherals.add(gatt.device)
             }
 
+            // Disconnect after successful read
             gatt.disconnect()
-//            isBusy = false
-//            discoveredPeripherals.remove(gatt.device)
+        } else {
+            Log.w("InterShareSDK [BLE Central]", "GATT READ failed with status: $status for ${gatt.device.name}")
+            gatt.disconnect()
         }
     }
 
@@ -132,16 +155,20 @@ class BLECentralManager(private val context: Context, private val internal: Inte
     companion object {
         var discoveredPeripherals = mutableListOf<BluetoothDevice>()
         var currentlyConnectedDevices = mutableListOf<BluetoothDevice>()
+        private val connectionAttempts = ConcurrentHashMap<String, Long>()
+        private const val CONNECTION_COOLDOWN_MS = 10000L // 10 seconds
     }
 
     override fun startScanning() {
         if (isScanning) {
+            Log.d("InterShareSDK [BLE Central]", "Already scanning, ignoring start request")
             return
         }
 
         isScanning = true
         discoveredPeripherals.clear()
         currentlyConnectedDevices.clear()
+        connectionAttempts.clear()
 
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
             throw BlePermissionNotGrantedException()
@@ -164,10 +191,17 @@ class BLECentralManager(private val context: Context, private val internal: Inte
 
         scanJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
-                bluetoothAdapter.adapter.bluetoothLeScanner.startScan(scanFilter, settings, leScanCallback)
-                delay(scanIntervalMillis)
-                bluetoothAdapter.adapter.bluetoothLeScanner.stopScan(leScanCallback)
-                delay(pauseBetweenScans)
+                try {
+                    Log.d("InterShareSDK [BLE Central]", "Starting scan cycle")
+                    bluetoothAdapter.adapter.bluetoothLeScanner.startScan(scanFilter, settings, leScanCallback)
+                    delay(scanIntervalMillis)
+                    bluetoothAdapter.adapter.bluetoothLeScanner.stopScan(leScanCallback)
+                    Log.d("InterShareSDK [BLE Central]", "Pausing scan cycle")
+                    delay(pauseBetweenScans)
+                } catch (e: Exception) {
+                    Log.e("InterShareSDK [BLE Central]", "Error during scanning: ${e.message}")
+                    delay(1000) // Brief pause on error
+                }
             }
         }
     }
@@ -177,6 +211,7 @@ class BLECentralManager(private val context: Context, private val internal: Inte
             throw BlePermissionNotGrantedException()
         }
 
+        Log.d("InterShareSDK [BLE Central]", "Stopping BLE scanning")
         scanJob?.cancel()
         bluetoothAdapter.adapter.bluetoothLeScanner.stopScan(leScanCallback)
         isScanning = false
@@ -185,9 +220,21 @@ class BLECentralManager(private val context: Context, private val internal: Inte
     @SuppressLint("MissingPermission")
     private val leScanCallback: ScanCallback = object : ScanCallback() {
         fun addDevice(device: BluetoothDevice) {
+            val deviceAddress = device.address
+            val currentTime = System.currentTimeMillis()
+            
+            // Check if we've attempted to connect to this device recently
+            val lastAttempt = connectionAttempts[deviceAddress]
+            if (lastAttempt != null && (currentTime - lastAttempt) < CONNECTION_COOLDOWN_MS) {
+                Log.d("InterShareSDK [BLE Central]", "Skipping connection to ${device.name} (cooldown)")
+                return
+            }
+
             if (!currentlyConnectedDevices.contains(device)) {
                 currentlyConnectedDevices.add(device)
-                Log.d("InterShareSDK [BLE Central]", "Found device: ${device.name} (${device.address}): ${device.uuids}")
+                connectionAttempts[deviceAddress] = currentTime
+                
+                Log.d("InterShareSDK [BLE Central]", "Found device: ${device.name} (${device.address})")
 
                 device.connectGatt(
                     context,
@@ -199,7 +246,6 @@ class BLECentralManager(private val context: Context, private val internal: Inte
             }
         }
 
-
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             addDevice(result.device)
         }
@@ -208,6 +254,10 @@ class BLECentralManager(private val context: Context, private val internal: Inte
             results.forEach { result ->
                 addDevice(result.device)
             }
+        }
+
+        override fun onScanFailed(errorCode: Int) {
+            Log.e("InterShareSDK [BLE Central]", "Scan failed with error code: $errorCode")
         }
     }
 }

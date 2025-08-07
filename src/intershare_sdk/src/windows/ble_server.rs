@@ -9,6 +9,7 @@ use protocol::discovery::DeviceDiscoveryMessage;
 use protocol::prost::Message;
 use crate::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
 use crate::nearby_server::InternalNearbyServer;
+use log::{error, info, warn};
 
 impl InternalNearbyServer {
     pub(crate) async fn setup_gatt_server(&self) -> WinResult<GattServiceProvider> {
@@ -53,6 +54,8 @@ impl InternalNearbyServer {
                     let buffer = writer.DetachBuffer()?;
                     request.RespondWithValue(&buffer)?;
                     deferral.Complete()?;
+                    
+                    info!("Responded to GATT read request");
                 }
                 Ok(())
             },
@@ -65,7 +68,16 @@ impl InternalNearbyServer {
     
     
     pub(crate) async fn start_windows_server(&self) {
-        let gatt_service_provider = self.setup_gatt_server().await.expect("Failed to start GATT server");
+        let gatt_service_provider = match self.setup_gatt_server().await {
+            Ok(provider) => {
+                info!("Successfully created GATT service provider");
+                provider
+            }
+            Err(e) => {
+                error!("Failed to start GATT server: {:?}", e);
+                return;
+            }
+        };
 
         let mut writable_gatt_service = self.gatt_service_provider
             .write()
@@ -73,10 +85,48 @@ impl InternalNearbyServer {
 
         let service_provider = writable_gatt_service.insert(gatt_service_provider);
 
-        let adv_parameters = GattServiceProviderAdvertisingParameters::new().expect("Failed to create new GattServiceProviderAdvertisingParameters");
-        adv_parameters.SetIsConnectable(true).expect("Failed to set IsConnectable");
-        adv_parameters.SetIsDiscoverable(true).expect("Failed to set IsDiscoverable");
-        service_provider.StartAdvertisingWithParameters(&adv_parameters).expect("Failed to start Advertising");
+        let adv_parameters = match GattServiceProviderAdvertisingParameters::new() {
+            Ok(params) => params,
+            Err(e) => {
+                error!("Failed to create advertising parameters: {:?}", e);
+                return;
+            }
+        };
+
+        // Set more aggressive advertising parameters for better discoverability
+        if let Err(e) = adv_parameters.SetIsConnectable(true) {
+            error!("Failed to set IsConnectable: {:?}", e);
+            return;
+        }
+        
+        if let Err(e) = adv_parameters.SetIsDiscoverable(true) {
+            error!("Failed to set IsDiscoverable: {:?}", e);
+            return;
+        }
+
+        // Try to start advertising with retry logic
+        let max_retries = 3;
+        let mut retry_count = 0;
+
+        while retry_count < max_retries {
+            match service_provider.StartAdvertisingWithParameters(&adv_parameters) {
+                Ok(_) => {
+                    info!("Successfully started BLE advertising");
+                    return;
+                }
+                Err(e) => {
+                    retry_count += 1;
+                    warn!("Advertising attempt {} failed: {:?}", retry_count, e);
+                    
+                    if retry_count < max_retries {
+                        // Wait before retry
+                        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                    }
+                }
+            }
+        }
+
+        error!("Failed to start BLE advertising after {} attempts", max_retries);
     }
 
     pub(crate) fn stop_windows_server(&self) {
@@ -85,7 +135,10 @@ impl InternalNearbyServer {
             .expect("Failed to lock GattServiceProvider");
 
         if let Some(gatt_service_provider) = gatt_service_provider.as_ref() {
-            gatt_service_provider.StopAdvertising().expect("Failed to stop advertising");
+            match gatt_service_provider.StopAdvertising() {
+                Ok(_) => info!("Successfully stopped BLE advertising"),
+                Err(e) => error!("Failed to stop advertising: {:?}", e),
+            }
         }
     }
 }

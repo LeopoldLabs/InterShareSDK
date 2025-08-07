@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
-use log::{error, info};
+use log::{error, info, warn};
 use windows::{
     core::{Result, GUID},
     Devices::Bluetooth::{
@@ -19,7 +19,8 @@ use tokio::runtime::Handle;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 use crate::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
 use crate::discovery::InternalDiscovery;
-
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 impl InternalDiscovery {
     pub(crate) fn windows_start_scanning(self: Arc<Self>) {
@@ -51,7 +52,6 @@ impl InternalDiscovery {
     pub(crate) fn windows_stop_scanning(&self) {
         self.scanning.store(false, Ordering::Relaxed);
     }
-
 }
 
 impl InternalDiscovery {
@@ -60,16 +60,17 @@ impl InternalDiscovery {
         scanning: Arc<AtomicBool>,
         runtime_handle: Handle
     ) -> Result<()> {
-        let watcher = BluetoothLEAdvertisementWatcher::new()?;
+        let mut watcher = BluetoothLEAdvertisementWatcher::new()?;
 
         // Set up the filter for the service UUID
         let filter = BluetoothLEAdvertisementFilter::new()?;
         filter.Advertisement()?.ServiceUuids()?.Append(GUID::from(BLE_SERVICE_UUID))?;
         watcher.SetAdvertisementFilter(&filter)?;
 
+        // Use active scanning for better discovery
         watcher.SetScanningMode(BluetoothLEScanningMode::Active)?;
 
-        let discovered_devices = Arc::new(Mutex::new(Vec::new()));
+        let discovered_devices = Arc::new(Mutex::new(HashMap::<u64, Instant>::new()));
         let discovered_devices_clone = discovered_devices.clone();
         let internal_discovery_clone = internal_discovery.clone();
 
@@ -84,14 +85,21 @@ impl InternalDiscovery {
                 let advertisement = args.Advertisement()?;
                 let local_name = advertisement.LocalName()?.to_string();
 
-                info!("Discovered device: {}", local_name);
-
+                // Check if we've seen this device recently (within 5 seconds)
                 let mut devices = discovered_devices.lock().unwrap();
-                devices.push(ble_address);
+                let now = Instant::now();
+                if let Some(last_seen) = devices.get(&ble_address) {
+                    if now.duration_since(*last_seen) < Duration::from_secs(5) {
+                        return Ok(());
+                    }
+                }
+                devices.insert(ble_address, now);
+
+                info!("Discovered device: {} (address: {})", local_name, ble_address);
 
                 runtime_handle.spawn(async move {
                     if let Err(e) = Self::connect_and_read_characteristic(ble_address, internal_discovery, local_name).await {
-                        error!("Error connecting to device: {:?}", e);
+                        warn!("Error connecting to device {}: {:?}", local_name, e);
                     }
                 });
 
@@ -102,9 +110,33 @@ impl InternalDiscovery {
         watcher.Received(&handler)?;
         watcher.Start()?;
 
-        // Wait until scanning is stopped
+        info!("Started BLE advertisement watcher");
+
+        // Implement scanning intervals like Android for better reliability
+        let scan_interval = Duration::from_secs(8);
+        let pause_interval = Duration::from_secs(2);
+        let mut is_scanning = true;
+
         while scanning.load(Ordering::Relaxed) {
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            if is_scanning {
+                tokio::time::sleep(scan_interval).await;
+                is_scanning = false;
+                
+                // Pause scanning briefly
+                if watcher.Status()? == BluetoothLEAdvertisementWatcherStatus::Started {
+                    watcher.Stop()?;
+                    info!("Paused BLE scanning");
+                }
+            } else {
+                tokio::time::sleep(pause_interval).await;
+                is_scanning = true;
+                
+                // Resume scanning
+                if watcher.Status()? != BluetoothLEAdvertisementWatcherStatus::Started {
+                    watcher.Start()?;
+                    info!("Resumed BLE scanning");
+                }
+            }
         }
 
         if watcher.Status()? == BluetoothLEAdvertisementWatcherStatus::Started {
@@ -120,22 +152,54 @@ impl InternalDiscovery {
         internal_discovery: Arc<Self>,
         device_name: String
     ) -> Result<()> {
-        // Connect to the device
+        // Add connection timeout and retry logic
+        let max_retries = 3;
+        let mut retry_count = 0;
+
+        while retry_count < max_retries {
+            match Self::attempt_connection(ble_address, &internal_discovery, &device_name).await {
+                Ok(_) => {
+                    info!("Successfully connected to device: {}", device_name);
+                    return Ok(());
+                }
+                Err(e) => {
+                    retry_count += 1;
+                    warn!("Connection attempt {} failed for device {}: {:?}", retry_count, device_name, e);
+                    
+                    if retry_count < max_retries {
+                        // Exponential backoff
+                        let delay = Duration::from_millis(500 * (2_u64.pow(retry_count as u32)));
+                        tokio::time::sleep(delay).await;
+                    }
+                }
+            }
+        }
+
+        error!("Failed to connect to device {} after {} attempts", device_name, max_retries);
+        Ok(())
+    }
+
+    async fn attempt_connection(
+        ble_address: u64,
+        internal_discovery: &Arc<Self>,
+        device_name: &str
+    ) -> Result<()> {
+        // Connect to the device with timeout
         let device = BluetoothLEDevice::FromBluetoothAddressAsync(ble_address)?.get()?;
         let device_id = device.DeviceId()?.to_string();
-        info!("Found device with name: \"{:?}\" ID: {:?}", device_name, device_id);
+        info!("Attempting connection to device: \"{:?}\" ID: {:?}", device_name, device_id);
 
-        // Get the GATT services
+        // Get the GATT services with timeout handling
         let services_result = device.GetGattServicesForUuidAsync(GUID::from(BLE_SERVICE_UUID))?.get()?;
         if services_result.Status()? != GattCommunicationStatus::Success {
             error!("[{}, {:?}] Failed to get GATT services", device_name, device_id);
-            return Ok(());
+            return Err(windows::core::Error::new(windows::core::E_FAIL, "Failed to get GATT services"));
         }
         let services = services_result.Services()?;
 
         if services.Size()? == 0 {
             error!("[{}, {:?}] No services found", device_name, device_id);
-            return Ok(());
+            return Err(windows::core::Error::new(windows::core::E_FAIL, "No services found"));
         }
 
         let service = services.GetAt(0)?;
@@ -144,13 +208,13 @@ impl InternalDiscovery {
         let characteristics_result = service.GetCharacteristicsForUuidAsync(GUID::from(BLE_DISCOVERY_CHARACTERISTIC_UUID))?.get()?;
         if characteristics_result.Status()? != GattCommunicationStatus::Success {
             error!("[{}, {:?}] Failed to get characteristics", device_name, device_id);
-            return Ok(());
+            return Err(windows::core::Error::new(windows::core::E_FAIL, "Failed to get characteristics"));
         }
         let characteristics = characteristics_result.Characteristics()?;
 
         if characteristics.Size()? == 0 {
             error!("[{}, {:?}] No characteristics found", device_name, device_id);
-            return Ok(());
+            return Err(windows::core::Error::new(windows::core::E_FAIL, "No characteristics found"));
         }
 
         let characteristic = characteristics.GetAt(0)?;
@@ -159,7 +223,7 @@ impl InternalDiscovery {
         let read_result = characteristic.ReadValueAsync()?.get()?;
         if read_result.Status()? != GattCommunicationStatus::Success {
             error!("[{}, {:?}] Failed to read characteristic", device_name, device_id);
-            return Ok(());
+            return Err(windows::core::Error::new(windows::core::E_FAIL, "Failed to read characteristic"));
         }
         let value = read_result.Value()?;
         let reader = DataReader::FromBuffer(&value)?;
