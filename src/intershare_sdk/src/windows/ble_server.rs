@@ -11,6 +11,10 @@ use crate::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
 use crate::nearby_server::InternalNearbyServer;
 use log::{error, info, warn};
 
+// Constants for optimized advertising
+const MAX_ADVERTISING_RETRIES: u32 = 3;
+const ADVERTISING_RETRY_DELAY_MS: u64 = 1000;
+
 impl InternalNearbyServer {
     pub(crate) async fn setup_gatt_server(&self) -> WinResult<GattServiceProvider> {
         let service_uuid = GUID::from(BLE_SERVICE_UUID);
@@ -93,7 +97,7 @@ impl InternalNearbyServer {
             }
         };
 
-        // Set more aggressive advertising parameters for better discoverability
+        // Set optimized advertising parameters for maximum discoverability
         if let Err(e) = adv_parameters.SetIsConnectable(true) {
             error!("Failed to set IsConnectable: {:?}", e);
             return;
@@ -104,29 +108,29 @@ impl InternalNearbyServer {
             return;
         }
 
-        // Try to start advertising with retry logic
-        let max_retries = 3;
+        // Try to start advertising with optimized retry logic
         let mut retry_count = 0;
 
-        while retry_count < max_retries {
+        while retry_count < MAX_ADVERTISING_RETRIES {
             match service_provider.StartAdvertisingWithParameters(&adv_parameters) {
                 Ok(_) => {
-                    info!("Successfully started BLE advertising");
+                    info!("Successfully started optimized BLE advertising");
                     return;
                 }
                 Err(e) => {
                     retry_count += 1;
                     warn!("Advertising attempt {} failed: {:?}", retry_count, e);
                     
-                    if retry_count < max_retries {
-                        // Wait before retry
-                        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                    if retry_count < MAX_ADVERTISING_RETRIES {
+                        // Exponential backoff for retry
+                        let delay = ADVERTISING_RETRY_DELAY_MS * retry_count as u64;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
                     }
                 }
             }
         }
 
-        error!("Failed to start BLE advertising after {} attempts", max_retries);
+        error!("Failed to start BLE advertising after {} attempts", MAX_ADVERTISING_RETRIES);
     }
 
     pub(crate) fn stop_windows_server(&self) {

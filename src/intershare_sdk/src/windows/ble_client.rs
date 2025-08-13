@@ -22,6 +22,14 @@ use crate::discovery::InternalDiscovery;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+// Constants for optimized scanning
+const MAX_CONCURRENT_CONNECTIONS: usize = 5;
+const CONNECTION_TIMEOUT: Duration = Duration::from_secs(8);
+const DEVICE_DEDUPLICATION_WINDOW: Duration = Duration::from_secs(3);
+const SCAN_INTERVAL: Duration = Duration::from_secs(12);
+const PAUSE_INTERVAL: Duration = Duration::from_secs(1);
+const CONNECTION_RETRY_DELAY: Duration = Duration::from_millis(200);
+
 impl InternalDiscovery {
     pub(crate) fn windows_start_scanning(self: Arc<Self>) {
         let scanning = self.scanning.clone();
@@ -67,11 +75,13 @@ impl InternalDiscovery {
         filter.Advertisement()?.ServiceUuids()?.Append(GUID::from(BLE_SERVICE_UUID))?;
         watcher.SetAdvertisementFilter(&filter)?;
 
-        // Use active scanning for better discovery
+        // Use active scanning for maximum discovery efficiency
         watcher.SetScanningMode(BluetoothLEScanningMode::Active)?;
 
         let discovered_devices = Arc::new(Mutex::new(HashMap::<u64, Instant>::new()));
+        let active_connections = Arc::new(Mutex::new(HashMap::<u64, Instant>::new()));
         let discovered_devices_clone = discovered_devices.clone();
+        let active_connections_clone = active_connections.clone();
         let internal_discovery_clone = internal_discovery.clone();
 
         let handler = TypedEventHandler::new(
@@ -80,20 +90,29 @@ impl InternalDiscovery {
                 let args = args.as_ref().unwrap();
                 let ble_address = args.BluetoothAddress()?;
                 let discovered_devices = discovered_devices_clone.clone();
+                let active_connections = active_connections_clone.clone();
                 let internal_discovery = internal_discovery_clone.clone();
 
                 let advertisement = args.Advertisement()?;
                 let local_name = advertisement.LocalName()?.to_string();
 
-                // Check if we've seen this device recently (within 5 seconds)
+                // Check if we've seen this device recently (within 3 seconds for faster discovery)
                 let mut devices = discovered_devices.lock().unwrap();
                 let now = Instant::now();
                 if let Some(last_seen) = devices.get(&ble_address) {
-                    if now.duration_since(*last_seen) < Duration::from_secs(5) {
+                    if now.duration_since(*last_seen) < DEVICE_DEDUPLICATION_WINDOW {
                         return Ok(());
                     }
                 }
                 devices.insert(ble_address, now);
+
+                // Check concurrent connection limit
+                let mut connections = active_connections.lock().unwrap();
+                if connections.len() >= MAX_CONCURRENT_CONNECTIONS {
+                    warn!("Too many concurrent connections ({}), skipping {}", MAX_CONCURRENT_CONNECTIONS, local_name);
+                    return Ok(());
+                }
+                connections.insert(ble_address, now);
 
                 info!("Discovered device: {} (address: {})", local_name, ble_address);
 
@@ -101,6 +120,10 @@ impl InternalDiscovery {
                     if let Err(e) = Self::connect_and_read_characteristic(ble_address, internal_discovery, local_name).await {
                         warn!("Error connecting to device {}: {:?}", local_name, e);
                     }
+                    
+                    // Remove from active connections
+                    let mut connections = active_connections.lock().unwrap();
+                    connections.remove(&ble_address);
                 });
 
                 Ok(())
@@ -110,25 +133,23 @@ impl InternalDiscovery {
         watcher.Received(&handler)?;
         watcher.Start()?;
 
-        info!("Started BLE advertisement watcher");
+        info!("Started optimized BLE advertisement watcher");
 
-        // Implement scanning intervals like Android for better reliability
-        let scan_interval = Duration::from_secs(8);
-        let pause_interval = Duration::from_secs(2);
+        // Optimized scanning intervals for maximum efficiency
         let mut is_scanning = true;
 
         while scanning.load(Ordering::Relaxed) {
             if is_scanning {
-                tokio::time::sleep(scan_interval).await;
+                tokio::time::sleep(SCAN_INTERVAL).await;
                 is_scanning = false;
                 
-                // Pause scanning briefly
+                // Brief pause to allow other operations
                 if watcher.Status()? == BluetoothLEAdvertisementWatcherStatus::Started {
                     watcher.Stop()?;
-                    info!("Paused BLE scanning");
+                    info!("Paused BLE scanning for brief interval");
                 }
             } else {
-                tokio::time::sleep(pause_interval).await;
+                tokio::time::sleep(PAUSE_INTERVAL).await;
                 is_scanning = true;
                 
                 // Resume scanning
@@ -152,24 +173,31 @@ impl InternalDiscovery {
         internal_discovery: Arc<Self>,
         device_name: String
     ) -> Result<()> {
-        // Add connection timeout and retry logic
-        let max_retries = 3;
+        // Optimized connection with shorter timeout and faster retry
+        let max_retries = 2;
         let mut retry_count = 0;
 
         while retry_count < max_retries {
-            match Self::attempt_connection(ble_address, &internal_discovery, &device_name).await {
-                Ok(_) => {
+            match tokio::time::timeout(CONNECTION_TIMEOUT, Self::attempt_connection(ble_address, &internal_discovery, &device_name)).await {
+                Ok(Ok(_)) => {
                     info!("Successfully connected to device: {}", device_name);
                     return Ok(());
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     retry_count += 1;
                     warn!("Connection attempt {} failed for device {}: {:?}", retry_count, device_name, e);
                     
                     if retry_count < max_retries {
-                        // Exponential backoff
-                        let delay = Duration::from_millis(500 * (2_u64.pow(retry_count as u32)));
-                        tokio::time::sleep(delay).await;
+                        // Shorter backoff for faster retry
+                        tokio::time::sleep(CONNECTION_RETRY_DELAY).await;
+                    }
+                }
+                Err(_) => {
+                    retry_count += 1;
+                    warn!("Connection timeout for device {}", device_name);
+                    
+                    if retry_count < max_retries {
+                        tokio::time::sleep(CONNECTION_RETRY_DELAY).await;
                     }
                 }
             }
@@ -184,7 +212,7 @@ impl InternalDiscovery {
         internal_discovery: &Arc<Self>,
         device_name: &str
     ) -> Result<()> {
-        // Connect to the device with timeout
+        // Connect to the device with optimized timeout
         let device = BluetoothLEDevice::FromBluetoothAddressAsync(ble_address)?.get()?;
         let device_id = device.DeviceId()?.to_string();
         info!("Attempting connection to device: \"{:?}\" ID: {:?}", device_name, device_id);
