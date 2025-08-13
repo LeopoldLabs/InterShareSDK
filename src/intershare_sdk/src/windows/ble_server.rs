@@ -69,69 +69,47 @@ impl InternalNearbyServer {
 
         return Ok(gatt_service_provider);
     }
-    
-    
+
+
     pub(crate) async fn start_windows_server(&self) {
-        let gatt_service_provider = match self.setup_gatt_server().await {
-            Ok(provider) => {
-                info!("Successfully created GATT service provider");
-                provider
-            }
-            Err(e) => {
-                error!("Failed to start GATT server: {:?}", e);
-                return;
-            }
+        let gatt = match self.setup_gatt_server().await {
+            Ok(p) => { info!("Successfully created GATT service provider"); p }
+            Err(e) => { error!("Failed to start GATT server: {:?}", e); return; }
         };
-
-        let mut writable_gatt_service = self.gatt_service_provider
-            .write()
-            .expect("Failed to unwrap gatt_service_provider");
-
-        let service_provider = writable_gatt_service.insert(gatt_service_provider);
 
         let adv_parameters = match GattServiceProviderAdvertisingParameters::new() {
             Ok(params) => params,
-            Err(e) => {
-                error!("Failed to create advertising parameters: {:?}", e);
-                return;
-            }
+            Err(e) => { error!("Failed to create advertising parameters: {:?}", e); return; }
         };
+        if let Err(e) = adv_parameters.SetIsConnectable(true) { error!("...{:?}", e); return; }
+        if let Err(e) = adv_parameters.SetIsDiscoverable(true) { error!("...{:?}", e); return; }
 
-        // Set optimized advertising parameters for maximum discoverability
-        if let Err(e) = adv_parameters.SetIsConnectable(true) {
-            error!("Failed to set IsConnectable: {:?}", e);
-            return;
-        }
-        
-        if let Err(e) = adv_parameters.SetIsDiscoverable(true) {
-            error!("Failed to set IsDiscoverable: {:?}", e);
-            return;
-        }
-
-        // Try to start advertising with optimized retry logic
         let mut retry_count = 0;
-
         while retry_count < MAX_ADVERTISING_RETRIES {
-            match service_provider.StartAdvertisingWithParameters(&adv_parameters) {
+            match gatt.StartAdvertisingWithParameters(&adv_parameters) {
                 Ok(_) => {
                     info!("Successfully started optimized BLE advertising");
+                    {
+                        let mut w = self.gatt_service_provider
+                            .write()
+                            .expect("Failed to lock GattServiceProvider");
+                        *w = Some(gatt.clone());
+                    }
                     return;
                 }
                 Err(e) => {
                     retry_count += 1;
                     warn!("Advertising attempt {} failed: {:?}", retry_count, e);
-                    
                     if retry_count < MAX_ADVERTISING_RETRIES {
-                        // Exponential backoff for retry
                         let delay = ADVERTISING_RETRY_DELAY_MS * retry_count as u64;
                         tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
                     }
                 }
             }
         }
-
         error!("Failed to start BLE advertising after {} attempts", MAX_ADVERTISING_RETRIES);
     }
+
 
     pub(crate) fn stop_windows_server(&self) {
         let gatt_service_provider = self.gatt_service_provider
