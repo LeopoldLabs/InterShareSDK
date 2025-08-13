@@ -31,13 +31,27 @@ impl InternalNearbyServer {
 
         characteristic_parameters.SetReadProtectionLevel(GattProtectionLevel::Plain)?;
 
+        // Provide a static value to avoid empty reads on some platforms
+        // Encode the current DeviceDiscoveryMessage and set it as the static value
+        let device_connection_info = self.device_connection_info.read().await.clone();
+        let initial_value = DeviceDiscoveryMessage {
+            content: Some(
+                Content::DeviceConnectionInfo(
+                    device_connection_info.clone()
+                )
+            ),
+        }.encode_length_delimited_to_vec();
+        let writer = DataWriter::new()?;
+        writer.WriteBytes(&initial_value)?;
+        let static_buffer = writer.DetachBuffer()?;
+        characteristic_parameters.SetStaticValue(&static_buffer)?;
+
         let characteristic_result: GattLocalCharacteristicResult = gatt_service_provider
             .Service()?
             .CreateCharacteristicAsync(characteristic_uuid, &characteristic_parameters)?
             .get()?;
 
         let gatt_characteristic = characteristic_result.Characteristic()?;
-        let device_connection_info = self.device_connection_info.read().await.clone();
 
         let read_requested_handler = TypedEventHandler::new(
             move |_sender: &Option<GattLocalCharacteristic>, args: &Option<GattReadRequestedEventArgs>| {
@@ -58,8 +72,6 @@ impl InternalNearbyServer {
                     let buffer = writer.DetachBuffer()?;
                     request.RespondWithValue(&buffer)?;
                     deferral.Complete()?;
-                    
-                    info!("Responded to GATT read request");
                 }
                 Ok(())
             },
