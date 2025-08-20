@@ -17,6 +17,7 @@ use windows::{
 };
 use tokio::runtime::Handle;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+use windows::Win32::Foundation::E_FAIL;
 use crate::{BLE_DISCOVERY_CHARACTERISTIC_UUID, BLE_SERVICE_UUID};
 use crate::discovery::InternalDiscovery;
 
