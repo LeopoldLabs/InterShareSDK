@@ -155,7 +155,7 @@ impl ShareStore {
             .expect("Failed to retrieve metadata from ZIP")
             .len();
 
-        info!("Finished ZIP with a size of: {:?}", file_size);
+        info!("ZIP size: {}", file_size);
 
         let transfer_request = Request {
             r#type: RequestTypes::ShareRequest as i32,
@@ -180,7 +180,7 @@ impl ShareStore {
             return Err(ConnectErrors::Declined);
         }
 
-        let mut buffer = [0; 1024];
+        let mut buffer = [0; 65536];
 
         update_progress(&progress_delegate, SendProgressState::Transferring { progress: 0.0 });
 
@@ -195,14 +195,18 @@ impl ShareStore {
                 break;
             }
 
-            let written_bytes = encrypted_stream.write(&buffer[..read_size])
+            encrypted_stream
+                .write_all(&buffer[..read_size])
                 .expect("Failed to write file buffer");
 
-            if written_bytes <= 0 {
-                break;
-            }
+            // let written_bytes = encrypted_stream.write(&buffer[..read_size])
+            //     .expect("Failed to write file buffer");
+            //
+            // if written_bytes <= 0 {
+            //     break;
+            // }
 
-            all_written += written_bytes;
+            all_written += read_size;
 
             update_progress(&progress_delegate, SendProgressState::Transferring { progress: (all_written as f64 / file_size as f64) });
         }

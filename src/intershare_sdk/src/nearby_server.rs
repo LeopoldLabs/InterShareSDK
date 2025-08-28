@@ -21,7 +21,7 @@ use crate::share_store::ShareStore;
 use crate::{create_tmp_file, init_logger, PROTOCOL_VERSION};
 use crate::stream::Close;
 use crate::transmission::tcp::TcpServer;
-use crate::zip::zip_files;
+use crate::zip::{zip_files};
 use protocol::prost::Message;
 
 #[cfg(target_os="windows")]
@@ -289,8 +289,8 @@ impl InternalNearbyServer {
                 let ip = self.get_current_ip();
 
                 if let Some(my_local_ip) = ip {
-                    info!("IP: {:?}", my_local_ip);
-                    info!("Port: {:?}", tcp_server.port);
+                    info!("IP: {}", my_local_ip);
+                    info!("Port: {}", tcp_server.port);
 
                     let port = tcp_server.port.clone();
                     *self.tcp_server.write().await = Some(tcp_server);

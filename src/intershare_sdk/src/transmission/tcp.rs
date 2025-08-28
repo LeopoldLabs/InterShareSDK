@@ -27,6 +27,7 @@ pub struct TcpServer {
 impl InternalNearbyServer {
     pub(crate) async fn new_tcp_server(&self, delegate: Arc<RwLock<Box<dyn NearbyConnectionDelegate>>>, file_storage: String) -> Result<TcpServer, io::Error> {
         let addresses = [
+            SocketAddr::from(([0, 0, 0, 0], 4251)),
             SocketAddr::from(([0, 0, 0, 0], 80)),
             SocketAddr::from(([0, 0, 0, 0], 8080)),
             SocketAddr::from(([0, 0, 0, 0], 0))

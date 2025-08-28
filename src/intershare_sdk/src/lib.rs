@@ -133,7 +133,7 @@ fn set_panic_logger() {
             "Unknown panic message".to_string()
         };
 
-        error!(
+        log::error!(
             "Panic occurred at file '{}' line {}: {}",
             location.file(),
             location.line(),

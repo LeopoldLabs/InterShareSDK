@@ -66,22 +66,22 @@ impl ConnectionRequest {
                 break;
             }
 
-            all_read += read_size as u64;
+            all_read += read_size;
 
             zip_file.write_all(&buffer[..read_size])
                 .expect("Failed to write file to disk");
 
             let progress = all_read as f64 / file_transfer.file_size as f64;
-            self.update_progress(ReceiveProgressState::Receiving { progress });
+            self.update_progress(ReceiveProgressState::Receiving { progress: progress });
 
-            if all_read >= file_transfer.file_size { break; }
+            if all_read >= file_transfer.file_size as usize { break; }
         }
 
         stream.close();
 
-        if all_read < file_transfer.file_size {
+        if all_read < file_transfer.file_size as usize {
             let _ = named_file.close();
-            warn!("Wrong file size. Expected: {:?}, but got {:?}", file_transfer.file_size, all_read);
+            warn!("Wrong file size. Expected: {}, but got {}", file_transfer.file_size, all_read);
             self.update_progress(ReceiveProgressState::Cancelled);
             return None;
         }
@@ -95,7 +95,7 @@ impl ConnectionRequest {
             }
             Err(error) => {
                 let _ = named_file.close();
-                error!("Error while unzipping: {:?}", error);
+                error!("Error while unzipping: {}", error);
                 self.update_progress(ReceiveProgressState::Cancelled);
                 None
             }

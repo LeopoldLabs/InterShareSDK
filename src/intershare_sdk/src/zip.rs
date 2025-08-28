@@ -50,7 +50,6 @@ impl<'a> CompressionProgress<'a> {
             // For multiple files, use file count progress
             self.finished_files as f64 / self.total_file_count as f64
         };
-        info!("Progress: {:?}", progress);
         self.progress_delegate.progress_changed(ShareProgressState::Compressing { progress });
     }
 
@@ -74,13 +73,23 @@ fn get_file_count(file_paths: &Vec<String>) -> usize {
     return count;
 }
 
+fn get_zip_file_options(file_size: usize) -> SimpleFileOptions {
+    let is_large_file = file_size >= u32::MAX as usize;
+
+    info!("File size: {} bytes, is large file: {}", file_size, is_large_file);
+
+    return SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored)
+        .large_file(is_large_file)
+}
+
 pub fn zip_files(tmp_file: File, file_paths: &Vec<String>, progress_delegate: &Option<Box<dyn ShareProgressDelegate>>) -> File {
     let mut zip = ZipWriter::new(tmp_file);
 
     let mut progress = if let Some(progress_delegate) = progress_delegate {
         let total_file_count: usize = get_file_count(&file_paths);
         let mut progress = CompressionProgress::new(total_file_count, 0, progress_delegate);
-        
+
         // For single file, get total size
         if total_file_count == 1 {
             if let Some(path) = file_paths.first() {
@@ -89,21 +98,22 @@ pub fn zip_files(tmp_file: File, file_paths: &Vec<String>, progress_delegate: &O
                 }
             }
         }
-        
+
         Some(progress)
     } else {
         None
     };
 
     for file_path in file_paths {
-        let file = Path::new(file_path);
+        let file_path = Path::new(file_path);
 
-        if file.is_dir() {
-            let prefix = file.file_name().unwrap().to_string_lossy().to_string();
-            zip_directory(&mut zip, file, file, Some(&prefix), &mut progress);
+        if file_path.is_dir() {
+            let prefix = file_path.file_name().unwrap().to_string_lossy().to_string();
+            zip_directory(&mut zip, file_path, file_path, Some(&prefix), &mut progress);
         } else {
-            info!("Compressing file: {:?}", file);
-            if let Err(e) = zip.start_file(convert_os_str(file.file_name().unwrap()), SimpleFileOptions::default()) {
+            info!("Compressing file: {}", file_path.display());
+
+            if let Err(e) = zip.start_file(convert_os_str(file_path.file_name().unwrap()), get_zip_file_options(file_path.metadata().unwrap().len() as usize)) {
                 error!("Failed to start zip file: {}", e);
                 continue;
             }
@@ -111,21 +121,21 @@ pub fn zip_files(tmp_file: File, file_paths: &Vec<String>, progress_delegate: &O
             let mut file = match File::open(file_path) {
                 Ok(f) => f,
                 Err(e) => {
-                    error!("Failed to open file {}: {}", file_path, e);
+                    error!("Failed to open file {}: {}", file_path.display(), e);
                     continue;
                 }
             };
 
-            let mut buffer = [0; 8192];
+            let mut buffer = [0; 65536];
             loop {
                 let bytes_read = match file.read(&mut buffer) {
                     Ok(n) => n,
                     Err(e) => {
-                        error!("Failed to read file {}: {}", file_path, e);
+                        error!("Failed to read file {}: {}", file_path.display(), e);
                         break;
                     }
                 };
-                
+
                 if bytes_read == 0 {
                     break;
                 }
@@ -134,7 +144,7 @@ pub fn zip_files(tmp_file: File, file_paths: &Vec<String>, progress_delegate: &O
                     error!("Failed to write to zip: {}", e);
                     break;
                 }
-                
+
                 if let Some(progress) = &mut progress {
                     if progress.total_file_count == 1 {
                         progress.update_bytes(bytes_read as u64);
@@ -205,7 +215,7 @@ pub fn zip_directory(zip: &mut ZipWriter<File>, base_dir: &Path, current_dir: &P
             info!("Adding file to ZIP: {:?}", zip_file_name);
 
             // Add the file to the ZIP archive
-            if let Err(error) = zip.start_file(&zip_file_name, SimpleFileOptions::default()) {
+            if let Err(error) = zip.start_file(&zip_file_name, get_zip_file_options(file_name.metadata().unwrap().len() as usize)) {
                 error!("Failed to start file in ZIP: {:?}", error);
                 continue;
             }
@@ -258,7 +268,7 @@ fn get_unique_path(path: &Path) -> PathBuf {
 
 pub fn unzip_file(zip_file: File, destination: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     info!("Reading ZIP file");
-    let mut archive = ZipArchive::new(BufReader::new(zip_file))?;
+    let mut archive = ZipArchive::new(zip_file)?;
     let mut written_files = vec![];
     let mut directory_map = HashMap::<PathBuf, PathBuf>::new();
 
