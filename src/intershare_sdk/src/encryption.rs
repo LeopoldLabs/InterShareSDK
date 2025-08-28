@@ -87,4 +87,5 @@ impl<TStream> Close for EncryptedStream<TStream> where TStream: Close + Read + W
 }
 
 pub trait EncryptedReadWrite: Read + Write + Send + Close {}
+impl<T> EncryptedReadWrite for rustls::StreamOwned<rustls::ClientConnection, T> where T: Read + Write + Send + Close {}
 impl<TStream> EncryptedReadWrite for EncryptedStream<TStream> where TStream : Read + Write + Send + Close {}

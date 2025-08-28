@@ -31,7 +31,7 @@ impl Connection {
         }
     }
 
-    async fn initiate_sender<T>(&self, raw_stream: T) -> Result<EncryptedStream<T>, ConnectErrors> where T: Read + Write {
+    async fn initiate_sender<T>(&self, raw_stream: T) -> Result<rustls::StreamOwned<rustls::ClientConnection, T>, ConnectErrors> where T: Read + Write {
         return Ok(match initiate_sender_communication(raw_stream).await {
             Ok(stream) => stream,
             Err(error) => return Err(ConnectErrors::FailedToEncryptStream { error: error.to_string() })
