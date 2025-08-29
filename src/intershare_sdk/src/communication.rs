@@ -1,16 +1,10 @@
-use crate::encryption::generate_iv;
-use crate::encryption::EncryptedStream;
-use log::info;
-use prost_stream::Stream;
-use protocol::communication::{EncryptionRequest, EncryptionResponse};
-use rand_core::OsRng;
+use rustls::pki_types::pem::PemObject as _;
 use rustls::pki_types::ServerName;
+use rustls::StreamOwned;
 use std::error::Error;
 use std::io::{Read, Write};
-use std::ops::DerefMut;
-use std::sync::Arc;
-use x25519_dalek::{EphemeralSecret, PublicKey};
 
+const PROTOCOL_VERSIONS: &[&'static rustls::SupportedProtocolVersion] = &[&rustls::version::TLS13];
 
 pub async fn initiate_sender_communication<'s, T>(
     stream: T,
@@ -18,55 +12,51 @@ pub async fn initiate_sender_communication<'s, T>(
 where
     T: Read + Write + 's,
 {
-    let config = rustls::ClientConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
-    .with_root_certificates(rustls::RootCertStore::empty())
-    .with_no_client_auth();
+    use rustls::{ClientConfig, ClientConnection};
+
+    // TODO verify certificate GUI flow
+    let provider = rustls::crypto::ring::default_provider();
+
+    let config = ClientConfig::builder_with_provider(provider.into())
+        .with_protocol_versions(PROTOCOL_VERSIONS)?
+        .with_root_certificates(rustls::RootCertStore::empty())
+        .with_no_client_auth();
 
     // TODO change to client name
     let server_name = ServerName::try_from("intershare")?;
 
-    // TODO store in cell
-    let config = Arc::new(config);
+    let conn = ClientConnection::new(config.into(), server_name)?;
 
-    let conn = rustls::ClientConnection::new(config, server_name)?;
-
-    let tls = rustls::StreamOwned::new(conn, stream);
+    let tls = StreamOwned::new(conn, stream);
 
     return Ok(tls);
 }
 
 pub fn initiate_receiver_communication<T>(
-    mut stream: T,
-) -> Result<EncryptedStream<T>, Box<dyn Error>>
+    stream: T,
+) -> Result<rustls::StreamOwned<rustls::ServerConnection, T>, Box<dyn Error>>
 where
     T: Read + Write,
 {
-    let secret = EphemeralSecret::random_from_rng(OsRng);
-    let public_key = PublicKey::from(&secret);
+    use ring::signature::Ed25519KeyPair;
+    use rustls::{pki_types::PrivateKeyDer, ServerConfig, ServerConnection};
 
-    let iv = generate_iv();
+    // TODO Store certificate
+    let pkcs8_bytes = Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new())?;
 
-    let mut prost_stream = Stream::new(&mut stream);
+    let key_der = PrivateKeyDer::from_pem_slice(pkcs8_bytes.as_ref())?;
 
-    let encryption_request = match prost_stream.recv::<EncryptionRequest>() {
-        Ok(message) => message,
-        Err(error) => return Err(Box::new(error)),
-    };
+    let provider = rustls::crypto::ring::default_provider();
 
-    let _ = prost_stream.send(&EncryptionResponse {
-        public_key: public_key.as_bytes().to_vec(),
-        iv: iv.to_vec(),
-    });
+    // TODO add client auth
+    let config = ServerConfig::builder_with_provider(provider.into())
+        .with_protocol_versions(PROTOCOL_VERSIONS)?
+        .with_no_client_auth()
+        .with_single_cert(Vec::new(), key_der)?;
 
-    let public_key: [u8; 32] = encryption_request
-        .public_key
-        .try_into()
-        .expect("Vec length is not 32");
-    let foreign_public_key = PublicKey::from(public_key);
+    let conn = ServerConnection::new(config.into())?;
 
-    let shared_secret = secret.diffie_hellman(&foreign_public_key);
+    let stream = StreamOwned::new(conn, stream);
 
-    let encrypted_stream = EncryptedStream::new(shared_secret.to_bytes(), iv, stream);
-
-    return Ok(encrypted_stream);
+    return Ok(stream);
 }
