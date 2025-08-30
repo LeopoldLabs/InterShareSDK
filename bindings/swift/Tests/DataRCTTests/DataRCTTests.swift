@@ -25,7 +25,7 @@ final class InterShareSDKTests: XCTestCase {
 
 //        let discovery = try Discovery(myDevice: device, method: DiscoveryMethod.both, delegate: nil)
 //        discovery.startSearch()
-//
+
 //        while (true) {
 //            let devices = discovery.getDevices();
 //            if (devices.count > 0) {

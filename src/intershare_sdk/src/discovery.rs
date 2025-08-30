@@ -131,11 +131,11 @@ impl InternalDiscovery {
 
         match discovery_message.content {
             None => {
-                warn!("[{}] Discovery message has no content", ble_uuid);
+                warn!("[{:?}] Discovery message has no content", ble_uuid);
             }
             Some(Content::DeviceConnectionInfo(device_connection_info)) => {
                 let Some(device) = &device_connection_info.device else {
-                    warn!("[{}] Discovery message does not contain any device info", ble_uuid);
+                    warn!("[{:?}] Discovery message does not contain any device info", ble_uuid);
                     return;
                 };
 

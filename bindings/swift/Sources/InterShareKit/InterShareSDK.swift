@@ -923,7 +923,7 @@ public protocol InternalNearbyServerProtocol: AnyObject {
 
     func setTcpDetails(tcpInfo: TcpConnectionInfo)
 
-    func shareFiles(filePaths: [String], allowConvenienceShare: Bool, progressDelegate: ShareProgressDelegate?) async -> ShareStore
+    func shareFiles(filePaths: [String], allowConvenienceShare: Bool) async -> ShareStore
 
     func shareText(text: String, allowConvenienceShare: Bool) async -> ShareStore
 
@@ -1091,13 +1091,13 @@ open class InternalNearbyServer:
     }
     }
 
-    open func shareFiles(filePaths: [String], allowConvenienceShare: Bool, progressDelegate: ShareProgressDelegate?) async -> ShareStore {
+    open func shareFiles(filePaths: [String], allowConvenienceShare: Bool) async -> ShareStore {
         return
             try! await uniffiRustCallAsync(
                 rustFutureFunc: {
                     uniffi_intershare_sdk_fn_method_internalnearbyserver_share_files(
                         self.uniffiClonePointer(),
-                        FfiConverterSequenceString.lower(filePaths), FfiConverterBool.lower(allowConvenienceShare), FfiConverterOptionCallbackInterfaceShareProgressDelegate.lower(progressDelegate)
+                        FfiConverterSequenceString.lower(filePaths), FfiConverterBool.lower(allowConvenienceShare)
                     )
                 },
                 pollFunc: ffi_intershare_sdk_rust_future_poll_pointer,
@@ -2147,73 +2147,6 @@ public func FfiConverterTypeSendProgressState_lower(_ value: SendProgressState) 
 }
 
 extension SendProgressState: Equatable, Hashable {}
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum ShareProgressState {
-    case unknown
-    case compressing(progress: Double
-    )
-    case finished
-    case error
-}
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeShareProgressState: FfiConverterRustBuffer {
-    typealias SwiftType = ShareProgressState
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareProgressState {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        case 1: return .unknown
-
-        case 2: return try .compressing(progress: FfiConverterDouble.read(from: &buf)
-            )
-
-        case 3: return .finished
-
-        case 4: return .error
-
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: ShareProgressState, into buf: inout [UInt8]) {
-        switch value {
-        case .unknown:
-            writeInt(&buf, Int32(1))
-
-        case let .compressing(progress):
-            writeInt(&buf, Int32(2))
-            FfiConverterDouble.write(progress, into: &buf)
-
-        case .finished:
-            writeInt(&buf, Int32(3))
-
-        case .error:
-            writeInt(&buf, Int32(4))
-        }
-    }
-}
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-public func FfiConverterTypeShareProgressState_lift(_ buf: RustBuffer) throws -> ShareProgressState {
-    return try FfiConverterTypeShareProgressState.lift(buf)
-}
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-public func FfiConverterTypeShareProgressState_lower(_ value: ShareProgressState) -> RustBuffer {
-    return FfiConverterTypeShareProgressState.lower(value)
-}
-
-extension ShareProgressState: Equatable, Hashable {}
 
 public enum TransmissionSetupError {
     case UnableToStartTcpServer(error: String
@@ -3274,96 +3207,6 @@ extension FfiConverterCallbackInterfaceSendProgressDelegate: FfiConverter {
     }
 }
 
-public protocol ShareProgressDelegate: AnyObject {
-    func progressChanged(progress: ShareProgressState)
-}
-
-// Put the implementation in a struct so we don't pollute the top-level namespace
-private enum UniffiCallbackInterfaceShareProgressDelegate {
-    // Create the VTable using a series of closures.
-    // Swift automatically converts these into C callback functions.
-    static var vtable: UniffiVTableCallbackInterfaceShareProgressDelegate = .init(
-        progressChanged: { (
-            uniffiHandle: UInt64,
-            progress: RustBuffer,
-            _: UnsafeMutableRawPointer,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
-        ) in
-            let makeCall = {
-                () throws in
-                guard let uniffiObj = try? FfiConverterCallbackInterfaceShareProgressDelegate.handleMap.get(handle: uniffiHandle) else {
-                    throw UniffiInternalError.unexpectedStaleHandle
-                }
-                return try uniffiObj.progressChanged(
-                    progress: FfiConverterTypeShareProgressState.lift(progress)
-                )
-            }
-
-            let writeReturn = { () }
-            uniffiTraitInterfaceCall(
-                callStatus: uniffiCallStatus,
-                makeCall: makeCall,
-                writeReturn: writeReturn
-            )
-        },
-        uniffiFree: { (uniffiHandle: UInt64) in
-            let result = try? FfiConverterCallbackInterfaceShareProgressDelegate.handleMap.remove(handle: uniffiHandle)
-            if result == nil {
-                print("Uniffi callback interface ShareProgressDelegate: handle missing in uniffiFree")
-            }
-        }
-    )
-}
-
-private func uniffiCallbackInitShareProgressDelegate() {
-    uniffi_intershare_sdk_fn_init_callback_vtable_shareprogressdelegate(&UniffiCallbackInterfaceShareProgressDelegate.vtable)
-}
-
-// FfiConverter protocol for callback interfaces
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-private enum FfiConverterCallbackInterfaceShareProgressDelegate {
-    fileprivate static var handleMap = UniffiHandleMap<ShareProgressDelegate>()
-}
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-extension FfiConverterCallbackInterfaceShareProgressDelegate: FfiConverter {
-    typealias SwiftType = ShareProgressDelegate
-    typealias FfiType = UInt64
-
-    #if swift(>=5.8)
-        @_documentation(visibility: private)
-    #endif
-    public static func lift(_ handle: UInt64) throws -> SwiftType {
-        try handleMap.get(handle: handle)
-    }
-
-    #if swift(>=5.8)
-        @_documentation(visibility: private)
-    #endif
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        let handle: UInt64 = try readInt(&buf)
-        return try lift(handle)
-    }
-
-    #if swift(>=5.8)
-        @_documentation(visibility: private)
-    #endif
-    public static func lower(_ v: SwiftType) -> UInt64 {
-        return handleMap.insert(obj: v)
-    }
-
-    #if swift(>=5.8)
-        @_documentation(visibility: private)
-    #endif
-    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(v))
-    }
-}
-
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
@@ -3527,30 +3370,6 @@ private struct FfiConverterOptionCallbackInterfaceSendProgressDelegate: FfiConve
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterCallbackInterfaceSendProgressDelegate.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-private struct FfiConverterOptionCallbackInterfaceShareProgressDelegate: FfiConverterRustBuffer {
-    typealias SwiftType = ShareProgressDelegate?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterCallbackInterfaceShareProgressDelegate.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterCallbackInterfaceShareProgressDelegate.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -3893,7 +3712,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_intershare_sdk_checksum_method_internalnearbyserver_set_tcp_details() != 26689 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_share_files() != 46177 {
+    if uniffi_intershare_sdk_checksum_method_internalnearbyserver_share_files() != 4379 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_intershare_sdk_checksum_method_internalnearbyserver_share_text() != 58097 {
@@ -3956,9 +3775,6 @@ private var initializationResult: InitializationResult = {
     if uniffi_intershare_sdk_checksum_method_receiveprogressdelegate_progress_changed() != 42587 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_intershare_sdk_checksum_method_shareprogressdelegate_progress_changed() != 32927 {
-        return InitializationResult.apiChecksumMismatch
-    }
 
     uniffiCallbackInitBleDiscoveryImplementationDelegate()
     uniffiCallbackInitBleServerImplementationDelegate()
@@ -3969,7 +3785,6 @@ private var initializationResult: InitializationResult = {
     uniffiCallbackInitNearbyInstantReceiveDelegate()
     uniffiCallbackInitReceiveProgressDelegate()
     uniffiCallbackInitSendProgressDelegate()
-    uniffiCallbackInitShareProgressDelegate()
     return InitializationResult.ok
 }()
 

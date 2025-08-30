@@ -14,7 +14,7 @@ use std::sync::RwLock;
 #[cfg(not(target_os="android"))]
 use simplelog::{Config, WriteLogger};
 #[cfg(not(target_os="android"))]
-use log::{error, info, LevelFilter};
+use log::{info, LevelFilter};
 #[cfg(not(target_os="android"))]
 use directories::BaseDirs;
 #[cfg(not(target_os="android"))]
@@ -27,14 +27,12 @@ use std::sync::Once;
 pub use protocol;
 pub use protocol::communication::ClipboardTransferIntent;
 pub use protocol::discovery::Device;
-use tempfile::NamedTempFile;
 pub use thiserror::Error;
 pub use crate::nearby_server::ConnectionIntentType;
 pub use crate::connection_request::{ConnectionRequest, ReceiveProgressState, ReceiveProgressDelegate};
 pub use crate::protocol::discovery::{BluetoothLeConnectionInfo, TcpConnectionInfo};
 pub use crate::protocol::communication::FileTransferIntent;
 pub use crate::nearby_server::{InternalNearbyServer, NearbyConnectionDelegate};
-pub use crate::nearby_server::{ShareProgressDelegate, ShareProgressState};
 pub use crate::errors::ConnectErrors;
 pub use crate::share_store::{ShareStore, ConnectionMedium, SendProgressDelegate, SendProgressState};
 
@@ -49,13 +47,14 @@ pub mod connection_request;
 pub mod errors;
 pub mod share_store;
 pub mod connection;
-mod zip;
+mod tar;
 mod windows;
+mod progress;
 
 pub const PROTOCOL_VERSION: u32 = 0;
 pub const BLE_SERVICE_UUID: &str = "68D60EB2-8AAA-4D72-8851-BD6D64E169B7";
 pub const BLE_DISCOVERY_CHARACTERISTIC_UUID: &str = "0BEBF3FE-9A5E-4ED1-8157-76281B3F0DA5";
-pub const BLE_BUFFER_SIZE: usize = 1024;
+pub const BLE_BUFFER_SIZE: usize = 10240;
 
 #[cfg(not(target_os="android"))]
 static INIT_LOGGER: Once = Once::new();
@@ -187,24 +186,5 @@ pub fn set_tmp_dir(tmp: String) {
     *tmp_dir = Some(tmp);
 }
 
-fn create_tmp_file() -> NamedTempFile {
-    #[cfg(target_os = "android")]
-    {
-        let tmp_dir = TMP_DIR.read().unwrap_or_else(|_| {
-            panic!("Failed to acquire read lock on TMP_DIR.");
-        });
-
-        let dir = tmp_dir.clone().expect("TMP_DIR is not set on Android.");
-
-        NamedTempFile::new_in(dir)
-            .expect("Failed to create temporary file in the specified TMP_DIR.")
-    }
-
-    #[cfg(not(target_os="android"))]
-    {
-        NamedTempFile::new()
-            .expect("Failed to create temporary file.")
-    }
-}
 
 uniffi::include_scaffolding!("intershare_sdk");
