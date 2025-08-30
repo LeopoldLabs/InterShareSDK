@@ -109,8 +109,8 @@ public class NearbyServer {
 
     @available(macOS 13.0, *)
     @available(iOS 14.0, *)
-    public func share(urls: [String], allowConvenienceShare: Bool = true, progress: ShareProgressDelegate?) async -> ShareStore {
-        return await internalHandler.shareFiles(filePaths: urls, allowConvenienceShare: allowConvenienceShare, progressDelegate: progress)
+    public func share(urls: [String], allowConvenienceShare: Bool = true) async -> ShareStore {
+        return await internalHandler.shareFiles(filePaths: urls, allowConvenienceShare: allowConvenienceShare)
     }
 
     @available(macOS 13.0, *)

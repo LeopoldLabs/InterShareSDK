@@ -44,12 +44,12 @@ impl Connection {
         };
 
         let socket_string = format!("{0}:{1}", tcp_connection_details.hostname, tcp_connection_details.port);
-        info!("Connecting to: {:?}", socket_string);
+        info!("Connecting to: {}", socket_string);
 
         let socket_address = socket_string.to_socket_addrs();
 
         let Ok(socket_address) = socket_address else {
-            error!("{:?}", socket_address.unwrap_err());
+            error!("{}", socket_address.unwrap_err());
             return Err(ConnectErrors::FailedToGetSocketAddress);
         };
 
@@ -86,7 +86,7 @@ impl Connection {
         info!("Could not connect via WiFi");
 
         if let Err(error) = encrypted_stream {
-            error!("{:?}", error)
+            error!("{}", error)
         }
 
         // Use BLE if TCP fails

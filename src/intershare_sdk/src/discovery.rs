@@ -123,8 +123,6 @@ impl InternalDiscovery {
     }
 
     pub fn parse_discovery_message(self: Arc<Self>, data: Vec<u8>, ble_uuid: Option<String>) {
-        info!("Got discovery message from {:?}", ble_uuid);
-
         let discovery_message = DeviceDiscoveryMessage::decode_length_delimited(data.as_slice());
 
         let Ok(discovery_message) = discovery_message else {

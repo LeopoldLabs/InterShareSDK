@@ -18,6 +18,12 @@ import kotlinx.coroutines.*
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
+// Constants for optimized scanning
+private const val MAX_CONCURRENT_CONNECTIONS = 5
+private const val CONNECTION_COOLDOWN_MS = 5000L // Reduced from 10s to 5s for faster discovery
+private const val SCAN_INTERVAL_MILLIS = 15000L // Increased for longer scanning periods
+private const val PAUSE_BETWEEN_SCANS = 500L // Reduced pause for more aggressive scanning
+private const val CONNECTION_TIMEOUT_MS = 8000L
 
 @SuppressLint("MissingPermission")
 class BluetoothGattCallbackImplementation(
@@ -148,15 +154,12 @@ class BLECentralManager(private val context: Context, private val internal: Inte
     }
 
     private var scanJob: Job? = null
-    private val scanIntervalMillis = 8000L
-    private val pauseBetweenScans = 2000L
     private var isScanning = false
 
     companion object {
         var discoveredPeripherals = mutableListOf<BluetoothDevice>()
         var currentlyConnectedDevices = mutableListOf<BluetoothDevice>()
         private val connectionAttempts = ConcurrentHashMap<String, Long>()
-        private const val CONNECTION_COOLDOWN_MS = 10000L // 10 seconds
     }
 
     override fun startScanning() {
@@ -180,10 +183,11 @@ class BLECentralManager(private val context: Context, private val internal: Inte
                 .build()
         )
 
+        // Optimized scanning settings for maximum discovery efficiency
         val settings = ScanSettings.Builder()
             .setLegacy(false)
             .setPhy(ScanSettings.PHY_LE_ALL_SUPPORTED)
-            .setNumOfMatches(ScanSettings.MATCH_NUM_ONE_ADVERTISEMENT)
+            .setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
             .setReportDelay(0L)
@@ -192,15 +196,15 @@ class BLECentralManager(private val context: Context, private val internal: Inte
         scanJob = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
                 try {
-                    Log.d("InterShareSDK [BLE Central]", "Starting scan cycle")
+                    Log.d("InterShareSDK [BLE Central]", "Starting optimized scan cycle")
                     bluetoothAdapter.adapter.bluetoothLeScanner.startScan(scanFilter, settings, leScanCallback)
-                    delay(scanIntervalMillis)
+                    delay(SCAN_INTERVAL_MILLIS)
                     bluetoothAdapter.adapter.bluetoothLeScanner.stopScan(leScanCallback)
-                    Log.d("InterShareSDK [BLE Central]", "Pausing scan cycle")
-                    delay(pauseBetweenScans)
+                    Log.d("InterShareSDK [BLE Central]", "Brief pause between scan cycles")
+                    delay(PAUSE_BETWEEN_SCANS)
                 } catch (e: Exception) {
                     Log.e("InterShareSDK [BLE Central]", "Error during scanning: ${e.message}")
-                    delay(1000) // Brief pause on error
+                    delay(500) // Brief pause on error
                 }
             }
         }
@@ -230,12 +234,19 @@ class BLECentralManager(private val context: Context, private val internal: Inte
                 return
             }
 
+            // Check concurrent connection limit
+            if (currentlyConnectedDevices.size >= MAX_CONCURRENT_CONNECTIONS) {
+                Log.d("InterShareSDK [BLE Central]", "Too many concurrent connections (${MAX_CONCURRENT_CONNECTIONS}), skipping ${device.name}")
+                return
+            }
+
             if (!currentlyConnectedDevices.contains(device)) {
                 currentlyConnectedDevices.add(device)
                 connectionAttempts[deviceAddress] = currentTime
                 
                 Log.d("InterShareSDK [BLE Central]", "Found device: ${device.name} (${device.address})")
 
+                // Use optimized connection parameters
                 device.connectGatt(
                     context,
                     false,
@@ -258,6 +269,13 @@ class BLECentralManager(private val context: Context, private val internal: Inte
 
         override fun onScanFailed(errorCode: Int) {
             Log.e("InterShareSDK [BLE Central]", "Scan failed with error code: $errorCode")
+            // Attempt to restart scanning on failure
+            if (isScanning) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    delay(1000)
+                    startScanning()
+                }
+            }
         }
     }
 }

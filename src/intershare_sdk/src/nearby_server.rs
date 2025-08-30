@@ -2,7 +2,6 @@ use crate::stream::NativeStreamDelegate;
 use std::fmt::Debug;
 use std::io::{Read, Write};
 use std::sync::Arc;
-
 use local_ip_address::local_ip;
 use log::{error, info};
 use prost_stream::Stream;
@@ -18,10 +17,9 @@ use crate::connection::Connection;
 use crate::connection_request::ConnectionRequest;
 use crate::errors::RequestConvenienceShareErrors;
 use crate::share_store::ShareStore;
-use crate::{create_tmp_file, init_logger, PROTOCOL_VERSION};
+use crate::{init_logger, PROTOCOL_VERSION};
 use crate::stream::Close;
 use crate::transmission::tcp::TcpServer;
-use crate::zip::zip_files;
 use protocol::prost::Message;
 
 #[cfg(target_os="windows")]
@@ -42,19 +40,6 @@ pub trait L2CapDelegate: Send + Sync + Debug {
 pub enum ConnectionIntentType {
     FileTransfer,
     Clipboard
-}
-
-#[derive(uniffi::Enum)]
-pub enum ShareProgressState {
-    Unknown,
-    Compressing { progress: f64 },
-    Finished,
-    Error
-}
-
-#[uniffi::export(callback_interface)]
-pub trait ShareProgressDelegate: Send + Sync + Debug {
-    fn progress_changed(&self, progress: ShareProgressState);
 }
 
 #[uniffi::export(callback_interface)]
@@ -289,8 +274,8 @@ impl InternalNearbyServer {
                 let ip = self.get_current_ip();
 
                 if let Some(my_local_ip) = ip {
-                    info!("IP: {:?}", my_local_ip);
-                    info!("Port: {:?}", tcp_server.port);
+                    info!("IP: {}", my_local_ip);
+                    info!("Port: {}", tcp_server.port);
 
                     let port = tcp_server.port.clone();
                     *self.tcp_server.write().await = Some(tcp_server);
@@ -333,8 +318,6 @@ impl InternalNearbyServer {
             None,
             Some(text),
             allow_convenience_share,
-            None,
-            Arc::new(RwLock::new(None)),
             self.ble_l2_cap_client.clone(),
             self.device_connection_info.read().await.clone()
         ));
@@ -348,29 +331,16 @@ impl InternalNearbyServer {
         self.handle_incoming_connection_generic(native_stream_handle);
     }
 
-    pub async fn share_files(&self, file_paths: Vec<String>, allow_convenience_share: bool, progress_delegate: Option<Box<dyn ShareProgressDelegate>>) -> Arc<ShareStore> {
-        if let Some(progress_delegate) = &progress_delegate {
-            progress_delegate.progress_changed(ShareProgressState::Compressing { progress: 0.0 });
-        }
-
-        let tmp_file = create_tmp_file();
-        let zip_file = zip_files(tmp_file.reopen().expect("Failed to reopen tmp file"), &file_paths, &progress_delegate);
-
+    pub async fn share_files(&self, file_paths: Vec<String>, allow_convenience_share: bool) -> Arc<ShareStore> {
         let share_store = Arc::new(ShareStore::new(
             Some(file_paths),
             None,
             allow_convenience_share,
-            Some(Arc::new(RwLock::new(zip_file))),
-            Arc::new(RwLock::new(Some(tmp_file))),
             self.ble_l2_cap_client.clone(),
             self.device_connection_info.read().await.clone()
         ));
 
         *self.current_share_store.write().await = Some(share_store.clone());
-
-        if let Some(progress_delegate) = &progress_delegate {
-            progress_delegate.progress_changed(ShareProgressState::Finished);
-        }
 
         return share_store
     }
