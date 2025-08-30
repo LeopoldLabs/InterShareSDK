@@ -1,15 +1,12 @@
 name: Deploy
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version"
-        default: "0.0.0"
-        required: true
+  release:
+    types: [published]
 
 env:
   CARGO_TERM_COLOR: always
+  VERSION: ${{ github.event.release.tag_name || github.ref_name }}
 
 jobs:
   publish-dotnet:
@@ -41,12 +38,12 @@ jobs:
         dotnet build -c Release .\bindings\csharp\InterShareSdk
 
     - name: Pack
-      run: dotnet pack bindings/csharp/InterShareSdk/InterShareSdk.csproj -c Release -p:PackageVersion='${{ github.event.inputs.version }}' --output packages
+      run: dotnet pack bindings/csharp/InterShareSdk/InterShareSdk.csproj -c Release -p:PackageVersion='${{ env.VERSION }}' --output packages
 
     - name: Upload to GitHub registry
       run: |
         dotnet nuget add source --username InterShare --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text --name github "https://nuget.pkg.github.com/InterShare/index.json"
-        dotnet nuget push "packages/InterShareSdk.${{ github.event.inputs.version }}.nupkg" --api-key "${{ secrets.GITHUB_TOKEN }}" --source "github"
+        dotnet nuget push "packages/InterShareSdk.${{ env.VERSION }}.nupkg" --api-key "${{ secrets.GITHUB_TOKEN }}" --source "github"
 
   publish-android:
       name: Publish Android library
@@ -83,27 +80,10 @@ jobs:
             ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
             GITHUB_ACTOR: ${{ secrets.GITHUB_ACTOR }}
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            VERSION: ${{ github.event.inputs.version }}
+            VERSION: ${{ env.VERSION }}
           run: |
             echo $ANDROID_NDK_HOME
             echo $ANDROID_NDK_TOOLCHAIN_DIR
             rustup target add x86_64-linux-android x86_64-unknown-linux-gnu aarch64-linux-android armv7-linux-androideabi i686-linux-android
             cd bindings/kotlin
             ./gradlew clean build publish
-
-  create-release:
-    name: Create Realase
-    needs: [publish-android, publish-dotnet]
-    runs-on: ubuntu-latest
-    steps:
-    - name: Create Release strings
-      id: release_strings
-      run: |
-        echo "RELEASE_TAG=${{ github.event.inputs.version }}" >> $GITHUB_ENV
-        echo "RELEASE_NAME=Version ${{ github.event.inputs.version }}" >> $GITHUB_ENV
-
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ env.RELEASE_TAG }}
-        name: ${{ env.RELEASE_NAME }}
